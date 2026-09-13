@@ -310,3 +310,6 @@ camera direction, and advanced story pacing, and
 world systems, psychology, presentation, and episodes, and
 [docs/ADVENTURE_WORLD_OVERHAUL.md](docs/ADVENTURE_WORLD_OVERHAUL.md) for Caine's daily
 quest generator, expanded hub, and free-steering presentation.
+
+See [the visual overhaul notes](docs/VISUAL_OVERHAUL.md) for the detailed cast,
+rebuilt scenery, free-floor navigation, camera controls, and current boundaries.

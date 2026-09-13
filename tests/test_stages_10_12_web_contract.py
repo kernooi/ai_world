@@ -12,8 +12,8 @@ def test_stage_10_navigation_and_action_animation_are_present() -> None:
     assert "NAV_ROUTES" not in script
     assert "updateCharacterSteering" in script
     assert "separationRadius" in script
-    assert "arrivalRadius" in script
-    assert "portal-depart" in script
+    assert "navigation.route" in script
+    assert "portalUntil" in script
     assert "animateAction" in script
     assert "scene.collisionsEnabled = true" in script
 

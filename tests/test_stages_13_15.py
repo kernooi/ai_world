@@ -13,10 +13,12 @@ WEB_SCRIPT = (
 
 
 def test_stage_13_maps_emotion_to_face_and_body_targets() -> None:
-    assert "eyeTarget" in WEB_SCRIPT
-    assert "headTilt" in WEB_SCRIPT
-    assert "browAngle" in WEB_SCRIPT
-    assert "armPosture" in WEB_SCRIPT
+    art = (Path(__file__).parents[1] / "src" / "autonomous_ai_world" / "web" / "circus-art.js").read_text(encoding="utf-8")
+    assert "CircusArt.animate" in WEB_SCRIPT
+    assert "eyeTarget" in art
+    assert "headTilt" in art
+    assert "browAngle" in art
+    assert "armPosture" in art
     assert "gestureUntil" in WEB_SCRIPT
 
 

@@ -54,9 +54,8 @@ const VOICE_PROFILES = {
   zooble: { pitch: .96, rate: 1.03, hints: ["aria", "samantha"] },
   caine: { pitch: 1.25, rate: 1.16, hints: ["david", "guy", "male"] },
 };
-const STEERING = { maxSpeed: 7.5, acceleration: 5.2, arrivalRadius: 4.5, separationRadius: 2.4 };
 const worldView = { engine: null, scene: null, camera: null, sun: null, state: null, socket: null,
-  locations: new Map(), characters: new Map(), objects: new Map(), paths: new Set(), reconnects: 0,
+  navigation: new FreeNavigation(), paused: false, locations: new Map(), characters: new Map(), objects: new Map(), paths: new Set(), reconnects: 0,
   rain: null, locationIndex: 0, sessionId: null, lastMessageId: 0, lastSeenAt: 0,
   gloinks: [], showLights: [], portalRings: [], renderPaused: false };
 const voiceState = {
@@ -122,18 +121,18 @@ function createWorld() {
   scene.imageProcessingConfiguration.exposure = 1.05;
   scene.imageProcessingConfiguration.contrast = 1.12;
 
-  const camera = new BABYLON.ArcRotateCamera("observer", -Math.PI / 2.4, 1.05, 53, BABYLON.Vector3.Zero(), scene);
+  const camera = new BABYLON.ArcRotateCamera("observer", Math.PI / 2.25, 1.2, 52, new BABYLON.Vector3(0, 4, -9), scene);
   camera.attachControl(ui.canvas, true);
-  camera.lowerRadiusLimit = 15;
-  camera.upperRadiusLimit = 75;
+  camera.lowerRadiusLimit = 7;
+  camera.upperRadiusLimit = 190;
   camera.lowerBetaLimit = 0.48;
   camera.upperBetaLimit = 1.42;
   camera.wheelDeltaPercentage = 0.015;
   camera.panningSensibility = 90;
   worldView.camera = camera;
 
-  const hemi = new BABYLON.HemisphericLight("sky-light", new BABYLON.Vector3(0.2, 1, 0.1), scene);
-  hemi.intensity = 1.15;
+  const hemi = new BABYLON.HemisphericLight("sky-light", new BABYLON.Vector3(0.2, 1, -0.5), scene);
+  hemi.intensity = .72;
   hemi.groundColor = new BABYLON.Color3(0.2, 0.08, 0.23);
   const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.5, -1, 0.3), scene);
   sun.position = new BABYLON.Vector3(20, 35, -20);
@@ -141,21 +140,21 @@ function createWorld() {
   worldView.sun = sun;
   [[-15,12,-8,"#ff4964"],[15,12,-8,"#55d9ef"],[0,16,14,"#ffe06a"]].forEach(([x,y,z,color], index) => {
     const light = new BABYLON.SpotLight(`show-light-${index}`, new BABYLON.Vector3(x,y,z), new BABYLON.Vector3(-x,-y,-z).normalize(), Math.PI/2.8, 9, scene);
-    light.diffuse = BABYLON.Color3.FromHexString(color); light.intensity = 55; worldView.showLights.push(light);
+    light.diffuse = BABYLON.Color3.FromHexString(color); light.intensity = .7; worldView.showLights.push(light);
   });
 
-  const ground = BABYLON.MeshBuilder.CreateCylinder("circus-floor", { diameter: 72, height: .25, tessellation: 64 }, scene);
+  const ground = BABYLON.MeshBuilder.CreateBox("circus-floor", { width: 70, depth: 68, height: .25 }, scene);
   ground.position.y = -.13;
   const floorMat = new BABYLON.PBRMaterial("checker-floor", scene);
   const floorTexture = new BABYLON.DynamicTexture("checker-pattern", { width: 1024, height: 1024 }, scene, false);
   const floorContext = floorTexture.getContext();
-  const tile = 128;
-  for (let row = 0; row < 8; row++) for (let col = 0; col < 8; col++) {
-    floorContext.fillStyle = (row + col) % 2 ? "#d8c8a5" : "#a76a83";
+  const tile = 64;
+  for (let row = 0; row < 16; row++) for (let col = 0; col < 16; col++) {
+    floorContext.fillStyle = (row + col) % 2 ? "#e9cb83" : "#b52c44";
     floorContext.fillRect(col * tile, row * tile, tile, tile);
   }
   floorTexture.update();
-  floorMat.albedoTexture = floorTexture; floorMat.roughness = .88; floorMat.metallic = 0;
+  floorMat.albedoTexture = floorTexture; floorMat.emissiveColor = new BABYLON.Color3(.08,.045,.03); floorMat.roughness = .88; floorMat.metallic = 0;
   ground.material = floorMat;
   ground.receiveShadows = true;
 
@@ -171,7 +170,7 @@ function createWorld() {
   }
 
   const shadow = new BABYLON.ShadowGenerator(1024, sun);
-  shadow.useBlurExponentialShadowMap = true;
+  shadow.usePercentageCloserFiltering = true;
   shadow.blurKernel = 16;
   worldView.shadow = shadow;
 
@@ -195,70 +194,7 @@ function beamBetween(name, from, to, diameter, mat) {
   return beam;
 }
 
-function createCircusInterior() {
-  const red = material("tent-red", "#c9384a");
-  const gold = material("tent-gold", "#f3c845", .62);
-  const blue = material("tent-blue", "#3aaac4");
-  const plum = material("tent-plum", "#552b67");
-  const cream = material("tent-cream", "#f1ddaf");
-  const dark = material("tent-dark", "#25152e");
-  const radius = 34;
-
-  for (let i = 0; i < 32; i++) {
-    const angle = i / 32 * Math.PI * 2;
-    const panel = BABYLON.MeshBuilder.CreateBox(`wall-panel-${i}`, { width: 6.9, height: 11, depth: .6 }, worldView.scene);
-    panel.position = new BABYLON.Vector3(Math.cos(angle) * radius, 5.5, Math.sin(angle) * radius);
-    panel.rotation.y = -angle + Math.PI / 2;
-    panel.material = i % 2 ? red : cream;
-    worldView.shadow.addShadowCaster(panel);
-    if (i % 4 === 0) {
-      const pillar = BABYLON.MeshBuilder.CreateCylinder(`gold-pillar-${i}`, { diameter: 1.05, height: 14, tessellation: 12 }, worldView.scene);
-      pillar.position = new BABYLON.Vector3(Math.cos(angle) * (radius-.3), 7, Math.sin(angle) * (radius-.3));
-      pillar.material = gold; worldView.shadow.addShadowCaster(pillar);
-      beamBetween(`canopy-beam-${i}`, pillar.position.add(new BABYLON.Vector3(0,7,0)), new BABYLON.Vector3(0,21,0), .34, i % 8 ? red : blue);
-    }
-  }
-
-  const crown = BABYLON.MeshBuilder.CreateCylinder("canopy-crown", { diameterTop: 1.2, diameterBottom: 4.5, height: 4, tessellation: 16 }, worldView.scene);
-  crown.position.y = 21; crown.material = gold;
-  const centerPole = BABYLON.MeshBuilder.CreateCylinder("center-pole", { diameter: .7, height: 20, tessellation: 16 }, worldView.scene);
-  centerPole.position.y = 10; centerPole.material = gold;
-
-  [-13, 0, 13].forEach((x, i) => {
-    const ring = BABYLON.MeshBuilder.CreateTorus(`show-ring-${i}`, { diameter: 9.5, thickness: .34, tessellation: 48 }, worldView.scene);
-    ring.position = new BABYLON.Vector3(x, .18, 0); ring.material = i === 1 ? gold : blue;
-    const inner = BABYLON.MeshBuilder.CreateCylinder(`ring-carpet-${i}`, { diameter: 8.8, height: .14, tessellation: 48 }, worldView.scene);
-    inner.position = new BABYLON.Vector3(x,.07,0); inner.material = i === 1 ? red : plum;
-  });
-
-  [[-20,-9,.35],[20,-9,-.35],[-20,17,2.8],[20,17,-2.8]].forEach(([x,z,rotation], group) => {
-    for (let tier = 0; tier < 4; tier++) {
-      const bench = BABYLON.MeshBuilder.CreateBox(`bleacher-${group}-${tier}`, { width: 9, height: .8 + tier*.55, depth: 1.4 }, worldView.scene);
-      bench.position = new BABYLON.Vector3(x, (.8+tier*.55)/2, z+tier*1.3); bench.rotation.y = rotation;
-      bench.material = tier % 2 ? red : blue;
-    }
-  });
-
-  for (let i = 0; i < 28; i++) {
-    const angle = i / 28 * Math.PI * 2;
-    const bulb = BABYLON.MeshBuilder.CreateSphere(`marquee-bulb-${i}`, { diameter: .48, segments: 8 }, worldView.scene);
-    bulb.position = new BABYLON.Vector3(Math.cos(angle)*25, 8 + Math.sin(i*.8)*1.3, Math.sin(angle)*25);
-    bulb.material = i % 3 === 0 ? gold : i % 3 === 1 ? red : blue;
-  }
-
-  const trapezeBar = beamBetween("trapeze-bar", new BABYLON.Vector3(-5,12,1), new BABYLON.Vector3(5,12,1), .25, cream);
-  beamBetween("trapeze-rope-left", new BABYLON.Vector3(-5,12,1), new BABYLON.Vector3(-5,19,1), .08, cream);
-  beamBetween("trapeze-rope-right", new BABYLON.Vector3(5,12,1), new BABYLON.Vector3(5,19,1), .08, cream);
-  trapezeBar.metadata = { animated: true };
-
-  const curtainLeft = BABYLON.MeshBuilder.CreateBox("curtain-left", { width: 5, height: 10, depth: .65 }, worldView.scene);
-  curtainLeft.position = new BABYLON.Vector3(-4.2,5,-25.5); curtainLeft.material = red;
-  const curtainRight = curtainLeft.clone("curtain-right"); curtainRight.position.x = 4.2;
-  const valance = BABYLON.MeshBuilder.CreateCylinder("curtain-valance", { diameter: 11, height: 1.2, tessellation: 18 }, worldView.scene);
-  valance.position = new BABYLON.Vector3(0,10,-25.4); valance.rotation.z = Math.PI/2; valance.material = gold;
-
-  createCaine(new BABYLON.Vector3(0, 10.5, -15.5), dark, cream, gold, red);
-}
+function createCircusInterior() { CircusArt.environment(); }
 
 function createCaine(position, dark, cream, gold, red) {
   const root = new BABYLON.TransformNode("director-caine", worldView.scene); root.position = position;
@@ -315,308 +251,90 @@ function addPrimitive(parent, kind, name, options, position, mat) {
 }
 
 function buildLocation(location) {
-  if (worldView.locations.has(location.id)) return;
-  const root = new BABYLON.TransformNode(`location-${location.id}`, worldView.scene);
-  root.position = pointFor(location.id, location);
-  const zoneMat = material(`${location.id}-ground`, location.id === "adventure_portal" ? "#5b3176" : "#e0b955");
-  if (location.id === "main_tent") {
-    const pedestal = addPrimitive(root, "CreateCylinder", "tent-map-pedestal", { diameter: 3.6, height: .65, tessellation: 24 }, [0,.33,0], material("pedestal", "#f2cf50"));
-    const globe = addPrimitive(root, "CreateSphere", "tent-map-globe", { diameter: 1.8, segments: 16 }, [0,1.65,0], material("globe", "#62c8e5", .22));
-    pedestal.metadata = { display: true }; globe.metadata = { display: true };
-    for (let i=0; i<8; i++) {
-      const balloon = addPrimitive(root, "CreateSphere", `balloon-${i}`, { diameter: .75, segments: 10 }, [Math.cos(i*.78)*3.5, 3.4+(i%3)*.5, Math.sin(i*.78)*3.5], material(`balloon-mat-${i}`, i%3===0 ? "#f04f58" : i%3===1 ? "#4ec2df" : "#f2d34f"));
-      balloon.scaling.y = 1.25;
-    }
-  } else if (location.id === "center_stage") {
-    addPrimitive(root, "CreateCylinder", "center-stage-platform", { diameter: 11, height: .8, tessellation: 48 }, [0,.4,0], material("stage-red", "#b42e48"));
-    addPrimitive(root, "CreateTorus", "center-stage-trim", { diameter: 10.6, thickness: .35, tessellation: 48 }, [0,.86,0], material("stage-gold", "#f6cf4a", .3));
-    for (let i=0; i<12; i++) {
-      const angle = i/12*Math.PI*2;
-      addPrimitive(root, "CreateSphere", `stage-light-${i}`, { diameter: .35, segments: 8 }, [Math.cos(angle)*5.2,1.1,Math.sin(angle)*5.2], material(`stage-light-mat-${i}`, i%2 ? "#ffec8a" : "#64d8ee", .2));
-    }
-    const mic = addPrimitive(root, "CreateCylinder", "stage-mic", { diameter: .18, height: 3.2, tessellation: 10 }, [0,2.3,0], material("mic-stand", "#34273e", .25));
-    mic.rotation.z = -.12;
-  } else if (location.id === "bedroom_hall") {
-    const wall = material("hall-wall", "#e5b1c7"); const trim = material("hall-trim", "#5cbfd8");
-    addPrimitive(root, "CreateBox", "hall-back", { width: 12, height: 6.5, depth: .7 }, [0,3.25,2.6], wall);
-    const names = ["P", "R", "J", "G", "K", "Z"];
-    names.forEach((letter,i) => {
-      const x = -5 + i*2;
-      addPrimitive(root, "CreateBox", `room-door-${letter}`, { width: 1.55, height: 3.5, depth: .35 }, [x,1.75,2.15], material(`door-${letter}`, i%2 ? "#8a59b0" : "#d64b58"));
-      addPrimitive(root, "CreateSphere", `door-knob-${letter}`, { diameter: .18, segments: 8 }, [x+.5,1.7,1.94], trim);
-    });
-    const exitSign = addPrimitive(root, "CreateBox", "false-exit-sign", { width: 3.1, height: .8, depth: .25 }, [0,5.7,2.12], material("exit-sign", "#6ee88f", .25));
-    exitSign.metadata = { liar: true };
-  } else if (location.id === "dining_hall") {
-    const tableMat = material("banquet-table", "#8c4d38");
-    addPrimitive(root, "CreateBox", "long-table", { width: 11, height: .55, depth: 3.2 }, [0,2,0], tableMat);
-    for (let i=-4; i<=4; i+=2) for (const side of [-1,1]) {
-      addPrimitive(root, "CreateBox", `chair-${i}-${side}`, { width: 1, height: 1.7, depth: 1 }, [i,.85,side*2.5], material(`chair-mat-${i}-${side}`, "#4f78b7"));
-    }
-    const cake = addPrimitive(root, "CreateCylinder", "banquet-cake", { diameter: 2.2, height: 1.5, tessellation: 24 }, [0,3,0], material("cake", "#ef8fb1"));
-    addPrimitive(root, "CreateCylinder", "cake-frosting", { diameter: 2.35, height: .25, tessellation: 24 }, [0,3.78,0], material("frosting", "#fff0cb"));
-    cake.metadata = { regenerates: true };
-  } else if (location.id === "backstage") {
-    const crateMat = material("prop-crates", "#ad7049");
-    [[-4,0,0],[3,0,1],[-2,0,3],[4,0,-3]].forEach(([x,,z],i) => {
-      const crate = addPrimitive(root, "CreateBox", `prop-crate-${i}`, { size: 2.2 }, [x,1.1,z], crateMat); crate.rotation.y = i*.38;
-    });
-    const cannon = addPrimitive(root, "CreateCylinder", "toy-cannon", { diameter: 1.7, height: 4.4, tessellation: 16 }, [0,2,-2], material("cannon", "#6150a0", .32));
-    cannon.rotation.z = Math.PI/2; cannon.rotation.x = .35;
-    for (let i=0;i<4;i++) {
-      const hoop = addPrimitive(root, "CreateTorus", `prop-hoop-${i}`, { diameter: 2.4+i*.25, thickness: .14, tessellation: 24 }, [-5+i*1.2,2.2+i*.3,-2], material(`hoop-mat-${i}`, i%2 ? "#f2ce44" : "#e64856"));
-      hoop.rotation.x = Math.PI/2;
-    }
-  } else if (location.id === "circus_grounds") {
-    addPrimitive(root,"CreateCylinder","grounds-plaza",{diameter:22,height:.38,tessellation:48},[0,.19,0],material("grounds-plaza-mat","#e7c66f"));
-    addPrimitive(root,"CreateCylinder","map-fountain",{diameter:5.5,height:1.1,tessellation:32},[0,.55,0],material("fountain-stone","#68cbd1",.3));
-    addPrimitive(root,"CreateSphere","map-orb",{diameter:2.8,segments:18},[0,3,0],material("map-orb-mat","#f5dd54",.15));
-    for(let i=0;i<10;i++){const a=i/10*Math.PI*2;addPrimitive(root,"CreateCylinder",`topiary-${i}`,{diameterTop:0,diameterBottom:2.2,height:4,tessellation:10},[Math.cos(a)*9,2,Math.sin(a)*9],material(`topiary-mat-${i}`,i%2?"#3b886f":"#5db986"));}
-  } else if (location.id === "rides_promenade") {
-    const wheel=addPrimitive(root,"CreateTorus","grounds-ferris-wheel",{diameter:13,thickness:.42,tessellation:48},[0,7,1],material("grounds-wheel-mat","#efcc4e",.22)); wheel.rotation.x=Math.PI/2;
-    for(let i=0;i<10;i++){const a=i/10*Math.PI*2;addPrimitive(root,"CreateBox",`grounds-wheel-car-${i}`,{size:1},[Math.cos(a)*6.5,7+Math.sin(a)*6.5,.4],material(`grounds-car-mat-${i}`,i%2?"#e84c61":"#57c9de"));}
-    [-10,10].forEach((x,i)=>addPrimitive(root,"CreateBox",`midway-booth-${i}`,{width:6,height:4,depth:4},[x,2,0],material(`booth-mat-${i}`,i?"#7d55ae":"#dc5264")));
-  } else if (location.id === "digital_lake") {
-    const water=addPrimitive(root,"CreateCylinder","digital-water",{diameter:25,height:.22,tessellation:64},[0,.05,0],material("digital-water-mat","#46b9df",.08)); water.scaling.z=.68;
-    addPrimitive(root,"CreateBox","pixel-dock",{width:3,height:.35,depth:11},[-8,.3,0],material("dock-mat","#d89b5c"));
-    for(let i=0;i<5;i++) addPrimitive(root,"CreatePolyhedron",`lake-island-${i}`,{type:2,size:1.8},[-2+i*4,.8,Math.sin(i)*4],material(`island-mat-${i}`,i%2?"#7ed188":"#ead259"));
-  } else if (location.id === "portal_gallery") {
-    addPrimitive(root,"CreateBox","portal-gallery-floor",{width:24,height:.35,depth:13},[0,.17,0],material("gallery-floor-mat","#60447d"));
-    for(let i=0;i<7;i++){const x=-9+i*3;const arch=addPrimitive(root,"CreateTorus",`archive-portal-${i}`,{diameter:3.2,thickness:.28,tessellation:28},[x,2.4,2],material(`archive-portal-mat-${i}`,i%3===0?"#ed5262":i%3===1?"#5fd2df":"#efd354",.18));arch.rotation.x=Math.PI/2;}
-    for(let i=0;i<8;i++) addPrimitive(root,"CreateCylinder",`gallery-column-${i}`,{diameter:.6,height:6,tessellation:12},[-11+i*3.15,3,-4],material(`gallery-column-mat-${i}`,"#edcf77"));
-  } else if (location.id === "grand_theater") {
-    addPrimitive(root,"CreateBox","theater-building",{width:20,height:8,depth:11},[0,4,0],material("theater-building-mat","#6b3d75"));
-    addPrimitive(root,"CreateBox","theater-stage",{width:13,height:1,depth:6},[0,1,-6],material("theater-stage-mat","#b93952"));
-    for(let i=0;i<6;i++) addPrimitive(root,"CreateCylinder",`theater-column-${i}`,{diameter:.65,height:7,tessellation:12},[-7.5+i*3,3.5,5.7],material(`theater-column-mat-${i}`,"#eed17b"));
-  } else if (location.id === "void_overlook") {
-    addPrimitive(root,"CreateBox","overlook-terrace",{width:20,height:.5,depth:13},[0,.25,0],material("overlook-mat","#74bd8b"));
-    for(let i=0;i<11;i++) addPrimitive(root,"CreateBox",`boundary-post-${i}`,{width:.25,height:2.2,depth:.25},[-9+i*1.8,1.1,5],material(`boundary-post-mat-${i}`,"#d9e8db",.2));
-    const voidPlane=addPrimitive(root,"CreateBox","void-window",{width:19,height:7,depth:.15},[0,3.5,6],material("void-window-mat","#161025",.05)); voidPlane.visibility=.72;
-  } else if (location.id === "adventure_portal") {
-    const colors = ["#ec4451","#f1ce47","#55c7dd","#8752af"];
-    colors.forEach((color,i) => {
-      const portal = addPrimitive(root, "CreateTorus", `portal-ring-${i}`, { diameter: 8-i*1.2, thickness: .42, tessellation: 40 }, [0,4,0], material(`portal-mat-${i}`, color, .18));
-      portal.rotation.x = Math.PI/2;
-      worldView.portalRings.push(portal);
-    });
-    const door = addPrimitive(root, "CreateBox", "portal-void", { width: 5.2, height: 6.8, depth: .35 }, [0,3.4,.15], material("portal-void-mat", "#1e102c", .1));
-    door.metadata = { portal: true };
-  } else if (location.id === "mirror_maze") {
-    const mirror = material("mirror-silver", "#b8e5e8", .08); mirror.metallic = .72;
-    for (let i=0;i<7;i++) {
-      const panel = addPrimitive(root,"CreateBox",`mirror-panel-${i}`,{width:1.7,height:5.5,depth:.18},[-5+i*1.7,2.75,Math.sin(i)*1.5],mirror);
-      panel.rotation.y=(i%2?.38:-.38);
-    }
-    addPrimitive(root,"CreateTorus","mirror-arch",{diameter:7,thickness:.38,tessellation:30},[0,3.5,2],material("mirror-arch-mat","#57d1dc",.2)).rotation.x=Math.PI/2;
-  } else if (location.id === "moon_carnival") {
-    const wheel=addPrimitive(root,"CreateTorus","memory-wheel",{diameter:7,thickness:.34,tessellation:36},[0,4,0],material("moon-wheel","#d5deef",.2)); wheel.rotation.x=Math.PI/2;
-    for(let i=0;i<8;i++){const a=i/8*Math.PI*2;addPrimitive(root,"CreateBox",`memory-car-${i}`,{size:.7},[Math.cos(a)*3.5,4+Math.sin(a)*3.5,-.3],material(`memory-car-mat-${i}`,i%2?"#7b5fc5":"#5fc8dc"));}
-    addPrimitive(root,"CreateSphere","painted-moon",{diameter:3.2,segments:16},[-3,7,2],material("moon","#f4e7a4",.25));
-  } else if (location.id === "candy_kingdom") {
-    const peppermint=material("peppermint","#e54855"); const frosting=material("candy-frosting","#f7d9e6");
-    [-3,0,3].forEach((x,i)=>{addPrimitive(root,"CreateCylinder",`candy-tower-${i}`,{diameter:2.2,height:3.5+i*.6,tessellation:16},[x,1.75+i*.3,0],i%2?frosting:peppermint);addPrimitive(root,"CreateCylinder",`candy-roof-${i}`,{diameterTop:0,diameterBottom:2.8,height:2,tessellation:14},[x,4.5+i*.6,0],i%2?peppermint:frosting);});
-    for(let i=0;i<5;i++) addPrimitive(root,"CreateSphere",`gumdrop-${i}`,{diameter:1.1,segments:10},[-4+i*2,.55,2.3],material(`gumdrop-mat-${i}`,i%2?"#66d09f":"#e6c94b"));
-  } else if (location.world_theme) {
-    const palettes = {
-      glitch_midway:["#e74659","#f1d64f","#4ccce1"], moon_funfair:["#6654ae","#dbe6ef","#55bfd5"],
-      candy_kingdom:["#ed668d","#f4d7e3","#71cc9d"], clockwork_sky:["#b67a45","#e8d27a","#91d8df"],
-      storybook_sea:["#3f8fbd","#eee1b2","#d96169"], neon_city:["#ef3c9b","#43d9e7","#6747be"],
-    };
-    const colors=palettes[location.world_theme]||["#7655a8","#e9c85b","#5cc7cb"];
-    addPrimitive(root,"CreateCylinder",`${location.id}-world-platform`,{diameter:19,height:.65,tessellation:40},[0,.32,0],material(`${location.id}-platform-mat`,colors[0]));
-    for(let i=0;i<7;i++){
-      const a=i/7*Math.PI*2; const height=2+(i%3)*1.5;
-      const prop=addPrimitive(root,i%2?"CreateBox":"CreateCylinder",`${location.id}-world-prop-${i}`,i%2?{width:1.5,height,depth:1.5}:{diameter:1.6,height,tessellation:10},[Math.cos(a)*6.5,height/2,Math.sin(a)*6.5],material(`${location.id}-prop-mat-${i}`,colors[(i+1)%colors.length],.3));
-      prop.rotation.y=a;
-    }
-    if(location.world_theme==="clockwork_sky") for(let i=0;i<5;i++) addPrimitive(root,"CreateTorus",`${location.id}-gear-${i}`,{diameter:2+i*.6,thickness:.18,tessellation:16},[-4+i*2,3+(i%2)*2,0],material(`${location.id}-gear-mat-${i}`,colors[1],.25)).rotation.x=Math.PI/2;
-    if(location.world_theme==="storybook_sea") addPrimitive(root,"CreateBox",`${location.id}-open-book`,{width:6,height:.3,depth:4},[0,1,-1],material(`${location.id}-book-mat`,colors[1]));
-    if(location.world_theme==="neon_city") for(let i=0;i<5;i++) addPrimitive(root,"CreateBox",`${location.id}-tower-${i}`,{width:2,height:5+i,depth:2},[-5+i*2.5,(5+i)/2,1],material(`${location.id}-tower-mat-${i}`,colors[i%3],.12));
-  } else {
-    addPrimitive(root, "CreateCylinder", `${location.id}-marker`, { diameter: 6, height: .3, tessellation: 12 }, [0,.15,0], zoneMat);
-  }
-  const marker = BABYLON.MeshBuilder.CreateDisc(`marker-${location.id}`, { radius: 5, tessellation: 48 }, worldView.scene);
-  marker.parent = root; marker.position.y = .035; marker.rotation.x = Math.PI / 2; marker.material = zoneMat;
-  const label = node("div", "location-label", location.name);
-  ui.labels.appendChild(label);
-  worldView.locations.set(location.id, { root, label, location, anchor: new BABYLON.Vector3(0, 7.5, 0) });
+  if (!worldView.locations.has(location.id)) CircusArt.location(location);
 }
 
 function syncPaths(locations) {
-  const byId = new Map(locations.map(item => [item.id, item]));
-  for (const location of locations) for (const targetId of location.exits) {
-    if (!byId.has(targetId)) continue;
-    if (Boolean(location.world_theme) !== Boolean(byId.get(targetId).world_theme)) continue;
-    const key = [location.id, targetId].sort().join("|");
-    if (worldView.paths.has(key)) continue;
-    const from = worldView.locations.get(location.id).root.position;
-    const to = worldView.locations.get(targetId).root.position;
-    const midpoint = BABYLON.Vector3.Center(from, to); midpoint.y = .025;
-    const distance = BABYLON.Vector3.Distance(from, to);
-    const path = BABYLON.MeshBuilder.CreateBox(`path-${key}`, { width: 1.05, height: .035, depth: distance }, worldView.scene);
-    path.position = midpoint; path.rotation.y = Math.atan2(to.x-from.x, to.z-from.z);
-    path.material = material(`path-mat-${key}`, "#a4916e");
-    worldView.paths.add(key);
-  }
+  // Connectivity is semantic; no prescribed tracks are drawn.
 }
 
-function createCharacter(character, index) {
-  const root = new BABYLON.TransformNode(`character-${character.id}`, worldView.scene);
-  const color = CHARACTER_COLORS[character.id] || ["#d77970", "#588fc3", "#73a77e", "#a480bc"][index % 4];
-  const primary = material(`primary-${character.id}`, color);
-  const white = material(`white-${character.id}`, "#f4ecd9");
-  const dark = material(`detail-${character.id}`, "#262033");
-  const red = material(`red-${character.id}`, "#e63d4d");
-  const blue = material(`blue-${character.id}`, "#3476c7");
-  const gold = material(`gold-${character.id}`, "#f0cf4c", .35);
-  const leftArm = new BABYLON.TransformNode(`${character.id}-left-arm-joint`, worldView.scene);
-  const rightArm = new BABYLON.TransformNode(`${character.id}-right-arm-joint`, worldView.scene);
-  const leftLeg = new BABYLON.TransformNode(`${character.id}-left-leg-joint`, worldView.scene);
-  const rightLeg = new BABYLON.TransformNode(`${character.id}-right-leg-joint`, worldView.scene);
-  [leftArm,rightArm,leftLeg,rightLeg].forEach(joint => joint.parent = root);
+function createCharacter(character, index) { CircusArt.character(character, index); }
 
-  if (character.id === "pomni") {
-    const leftBody = addPrimitive(root, "CreateBox", "pomni-red-torso", { width: .62, height: 1.45, depth: .7 }, [-.3,2.15,0], red);
-    const rightBody = addPrimitive(root, "CreateBox", "pomni-blue-torso", { width: .62, height: 1.45, depth: .7 }, [.3,2.15,0], blue);
-    leftBody.rotation.z = -.04; rightBody.rotation.z = .04;
-    addPrimitive(root, "CreateSphere", "pomni-head", { diameter: 1.12, segments: 14 }, [0,3.4,0], white);
-    [-.22,.22].forEach((x,i) => addPrimitive(root, "CreateSphere", `pomni-eye-${i}`, { diameter: .18, segments: 8 }, [x,3.47,-.51], i ? blue : red));
-    const hatLeft = addPrimitive(root, "CreateCylinder", "pomni-hat-red", { diameterTop: 0, diameterBottom: .72, height: 1.55, tessellation: 10 }, [-.32,4.35,0], red); hatLeft.rotation.z = -.38;
-    const hatRight = addPrimitive(root, "CreateCylinder", "pomni-hat-blue", { diameterTop: 0, diameterBottom: .72, height: 1.55, tessellation: 10 }, [.32,4.35,0], blue); hatRight.rotation.z = .38;
-    addPrimitive(root, "CreateSphere", "pomni-bell-red", { diameter: .28, segments: 8 }, [-.64,5,0], gold);
-    addPrimitive(root, "CreateSphere", "pomni-bell-blue", { diameter: .28, segments: 8 }, [.64,5,0], gold);
-    leftArm.position = new BABYLON.Vector3(-.72,2.45,0); rightArm.position = new BABYLON.Vector3(.72,2.45,0);
-    addPrimitive(leftArm,"CreateCylinder","pomni-left-arm",{diameter:.25,height:1.35,tessellation:8},[0,-.5,0],red);
-    addPrimitive(rightArm,"CreateCylinder","pomni-right-arm",{diameter:.25,height:1.35,tessellation:8},[0,-.5,0],blue);
-    leftLeg.position = new BABYLON.Vector3(-.3,1.45,0); rightLeg.position = new BABYLON.Vector3(.3,1.45,0);
-    addPrimitive(leftLeg,"CreateCylinder","pomni-left-leg",{diameter:.31,height:1.45,tessellation:8},[0,-.7,0],red);
-    addPrimitive(rightLeg,"CreateCylinder","pomni-right-leg",{diameter:.31,height:1.45,tessellation:8},[0,-.7,0],blue);
-  } else if (character.id === "ragatha") {
-    const dress = addPrimitive(root,"CreateCylinder","ragatha-dress",{diameterTop:1.05,diameterBottom:1.8,height:2.1,tessellation:12},[0,1.7,0],blue);
-    addPrimitive(root,"CreateSphere","ragatha-head",{diameter:1.15,segments:12},[0,3.25,0],white);
-    for(let i=0;i<9;i++) { const hair=addPrimitive(root,"CreateCylinder",`ragatha-yarn-${i}`,{diameter:.16,height:1.35,tessellation:6},[-.48+i*.12,3.75+(i%2)*.1,.18],red); hair.rotation.z=(i-4)*.08; }
-    addPrimitive(root,"CreateSphere","ragatha-button-eye",{diameter:.22,segments:8},[-.23,3.32,-.52],dark);
-    addPrimitive(root,"CreateSphere","ragatha-eye",{diameter:.15,segments:8},[.23,3.32,-.54],blue);
-    leftArm.position=new BABYLON.Vector3(-.75,2.35,0); rightArm.position=new BABYLON.Vector3(.75,2.35,0);
-    addPrimitive(leftArm,"CreateCylinder","ragatha-left-arm",{diameter:.24,height:1.5,tessellation:7},[0,-.6,0],white);
-    addPrimitive(rightArm,"CreateCylinder","ragatha-right-arm",{diameter:.24,height:1.5,tessellation:7},[0,-.6,0],white);
-    leftLeg.position=new BABYLON.Vector3(-.33,.9,0); rightLeg.position=new BABYLON.Vector3(.33,.9,0);
-    addPrimitive(leftLeg,"CreateCylinder","ragatha-left-leg",{diameter:.27,height:1.1,tessellation:7},[0,-.48,0],white);
-    addPrimitive(rightLeg,"CreateCylinder","ragatha-right-leg",{diameter:.27,height:1.1,tessellation:7},[0,-.48,0],white);
-    dress.rotation.y=.08;
-  } else if (character.id === "jax") {
-    addPrimitive(root,"CreateCylinder","jax-body",{diameterTop:.85,diameterBottom:1.2,height:2.15,tessellation:10},[0,2.2,0],primary);
-    addPrimitive(root,"CreateSphere","jax-head",{diameter:1.3,segments:12},[0,3.75,0],primary);
-    [-.33,.33].forEach((x,i)=>{ const ear=addPrimitive(root,"CreateCylinder",`jax-ear-${i}`,{diameterTop:.28,diameterBottom:.48,height:2.1,tessellation:9},[x,5.15,0],primary); ear.rotation.z=i?.12:-.12; });
-    [-.25,.25].forEach((x,i)=>addPrimitive(root,"CreateSphere",`jax-eye-${i}`,{diameter:.18,segments:7},[x,3.88,-.59],gold));
-    for(let i=0;i<6;i++) addPrimitive(root,"CreateBox",`jax-tooth-${i}`,{width:.18,height:.25,depth:.08},[-.45+i*.18,3.45,-.63],white);
-    leftArm.position=new BABYLON.Vector3(-.73,2.7,0); rightArm.position=new BABYLON.Vector3(.73,2.7,0);
-    addPrimitive(leftArm,"CreateCylinder","jax-left-arm",{diameter:.25,height:1.7,tessellation:8},[0,-.7,0],primary);
-    addPrimitive(rightArm,"CreateCylinder","jax-right-arm",{diameter:.25,height:1.7,tessellation:8},[0,-.7,0],primary);
-    leftLeg.position=new BABYLON.Vector3(-.3,1.25,0); rightLeg.position=new BABYLON.Vector3(.3,1.25,0);
-    addPrimitive(leftLeg,"CreateCylinder","jax-left-leg",{diameter:.3,height:1.65,tessellation:8},[0,-.7,0],primary);
-    addPrimitive(rightLeg,"CreateCylinder","jax-right-leg",{diameter:.3,height:1.65,tessellation:8},[0,-.7,0],primary);
-  } else if (character.id === "gangle") {
-    addPrimitive(root,"CreateTorus","gangle-ribbon-body",{diameter:1.4,thickness:.18,tessellation:24},[0,2,0],red);
-    addPrimitive(root,"CreateSphere","gangle-mask",{diameter:1.3,segments:16},[0,3.45,0],white).scaling.z=.35;
-    [-.25,.25].forEach((x,i)=>addPrimitive(root,"CreateSphere",`gangle-eye-${i}`,{diameter:.17,segments:8},[x,3.55,-.62],dark));
-    const mouth=addPrimitive(root,"CreateTorus","gangle-smile",{diameter:.52,thickness:.07,tessellation:16,arc:.5},[0,3.23,-.62],dark); mouth.rotation.z=Math.PI;
-    leftArm.position=new BABYLON.Vector3(-.65,2.3,0); rightArm.position=new BABYLON.Vector3(.65,2.3,0);
-    addPrimitive(leftArm,"CreateCylinder","gangle-left-ribbon",{diameter:.12,height:1.6,tessellation:6},[0,-.65,0],red);
-    addPrimitive(rightArm,"CreateCylinder","gangle-right-ribbon",{diameter:.12,height:1.6,tessellation:6},[0,-.65,0],red);
-    leftLeg.position=new BABYLON.Vector3(-.28,1.45,0); rightLeg.position=new BABYLON.Vector3(.28,1.45,0);
-    addPrimitive(leftLeg,"CreateCylinder","gangle-left-leg",{diameter:.12,height:1.5,tessellation:6},[0,-.7,0],red);
-    addPrimitive(rightLeg,"CreateCylinder","gangle-right-leg",{diameter:.12,height:1.5,tessellation:6},[0,-.7,0],red);
-  } else if (character.id === "kinger") {
-    addPrimitive(root,"CreateCylinder","kinger-robe",{diameterTop:1.1,diameterBottom:2,height:2.7,tessellation:16},[0,1.45,0],primary);
-    addPrimitive(root,"CreateSphere","kinger-head",{diameter:1.25,segments:12},[0,3.2,0],white);
-    addPrimitive(root,"CreateCylinder","kinger-crown",{diameterTop:1.5,diameterBottom:1.1,height:1.15,tessellation:6},[0,4.22,0],gold);
-    [-.24,.24].forEach((x,i)=>addPrimitive(root,"CreateSphere",`kinger-eye-${i}`,{diameter:.28,segments:8},[x,3.32,-.56],dark));
-    leftArm.position=new BABYLON.Vector3(-.9,2.3,0); rightArm.position=new BABYLON.Vector3(.9,2.3,0);
-    addPrimitive(leftArm,"CreateCylinder","kinger-left-arm",{diameter:.24,height:1.4,tessellation:7},[0,-.55,0],white);
-    addPrimitive(rightArm,"CreateCylinder","kinger-right-arm",{diameter:.24,height:1.4,tessellation:7},[0,-.55,0],white);
-    leftLeg.position=new BABYLON.Vector3(-.35,.45,0); rightLeg.position=new BABYLON.Vector3(.35,.45,0);
-  } else {
-    addPrimitive(root,"CreatePolyhedron","zooble-body",{type:2,size:1.05},[0,2.3,0],material("zooble-body","#efcf4c"));
-    addPrimitive(root,"CreateSphere","zooble-head",{diameter:1.15,segments:10},[0,3.6,0],material("zooble-head","#d34c7f"));
-    addPrimitive(root,"CreateCylinder","zooble-horn",{diameterTop:0,diameterBottom:.65,height:1.5,tessellation:9},[.45,4.48,0],blue).rotation.z=.38;
-    [-.24,.24].forEach((x,i)=>addPrimitive(root,"CreateSphere",`zooble-eye-${i}`,{diameter:i?.16:.28,segments:8},[x,3.68,-.52],i?dark:white));
-    leftArm.position=new BABYLON.Vector3(-.8,2.6,0); rightArm.position=new BABYLON.Vector3(.8,2.6,0);
-    addPrimitive(leftArm,"CreateBox","zooble-left-arm",{width:.3,height:1.5,depth:.3},[0,-.6,0],material("zooble-left","#51bfa5"));
-    addPrimitive(rightArm,"CreateCylinder","zooble-right-arm",{diameter:.34,height:1.5,tessellation:5},[0,-.6,0],material("zooble-right","#ef704d"));
-    leftLeg.position=new BABYLON.Vector3(-.35,1.55,0); rightLeg.position=new BABYLON.Vector3(.35,1.55,0);
-    addPrimitive(leftLeg,"CreateCylinder","zooble-left-leg",{diameter:.35,height:1.55,tessellation:6},[0,-.7,0],blue);
-    addPrimitive(rightLeg,"CreateBox","zooble-right-leg",{width:.38,height:1.55,depth:.38},[0,-.7,0],red);
+function navigationTarget(view, location) {
+  const group=location.location.adventure_id||"hub";
+  for(let attempt=0;attempt<25;attempt++){
+    const angle=Math.random()*Math.PI*2,radius=2+Math.random()*6;
+    const p={x:location.root.position.x+Math.cos(angle)*radius,z:location.root.position.z+Math.sin(angle)*radius};
+    if(worldView.navigation.clear(p.x,p.z,group))return p;
   }
-  const location = worldView.locations.get(character.location_id);
-  const faceY = { pomni: 3.15, ragatha: 3.04, jax: 3.43, gangle: 3.2, kinger: 3.02, zooble: 3.38 }[character.id] || 3.1;
-  const mouth = addPrimitive(root, "CreateBox", `${character.id}-expression-mouth`, { width: .46, height: .075, depth: .07 }, [0,faceY,-.63], dark);
-  const browLeft = addPrimitive(root, "CreateBox", `${character.id}-brow-left`, { width: .34, height: .07, depth: .06 }, [-.24,faceY+.54,-.61], dark);
-  const browRight = addPrimitive(root, "CreateBox", `${character.id}-brow-right`, { width: .34, height: .07, depth: .06 }, [.24,faceY+.54,-.61], dark);
-  const eyes = root.getChildMeshes().filter(mesh => mesh.name.includes("eye"));
-  const heads = root.getChildMeshes().filter(mesh => mesh.name.includes("head") || mesh.name.includes("mask"));
-  const offset = new BABYLON.Vector3(Math.cos(index*2.15)*1.65, 0, Math.sin(index*2.15)*1.65);
-  root.position = (location ? location.root.position : BABYLON.Vector3.Zero()).add(offset);
-  root.getChildMeshes().forEach(mesh => { mesh.checkCollisions = true; });
-  worldView.characters.set(character.id, {
-    root, leftArm, rightArm, leftLeg, rightLeg, mouth, brows: [browLeft,browRight], eyes, heads,
-    color, locationId: character.location_id, movingUntil: 0, talkingUntil: 0, gestureUntil: 0,
-    offset, movement: null, expression: "curiosity", stepPhase: index * .8,
-  });
+  return worldView.navigation.nearest(location.root.position,group);
 }
 
 function moveCharacter(view, locationId) {
-  const location = worldView.locations.get(locationId);
-  if (!location) return;
-  const target = location.root.position.add(view.offset.scale(.7));
-  const fromPocket = Boolean(worldView.locations.get(view.locationId)?.location.world_theme);
-  const toPocket = Boolean(location.location.world_theme);
-  if (fromPocket !== toPocket) {
-    view.movement = null; view.movingUntil = performance.now() + 900;
-    BABYLON.Animation.CreateAndStartAnimation("portal-depart", view.root, "scaling", 30, 14, view.root.scaling.clone(), new BABYLON.Vector3(.06,.06,.06), BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, null, () => {
-      view.root.position.copyFrom(target);
-      BABYLON.Animation.CreateAndStartAnimation("portal-arrive", view.root, "scaling", 30, 18, new BABYLON.Vector3(.06,.06,.06), BABYLON.Vector3.One(), BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
-    });
-    glitchFlash(); view.locationId = locationId; return;
+  const location=worldView.locations.get(locationId);if(!location)return;
+  const group=location.location.adventure_id||"hub",target=navigationTarget(view,location);if(!target)return;
+  const token=++view.portalToken;
+  if(group!==view.group){
+    view.movement=null;view.portalUntil=performance.now()+850;
+    window.setTimeout(()=>{if(token!==view.portalToken)return;view.root.position.set(target.x,0,target.z);view.group=group;},400);
+    glitchFlash();
+  } else {
+    view.portalUntil=0;
+    const path=worldView.navigation.route(view.root.position,target,group);
+    view.movement=path.length?{path,index:1,velocity:view.movement?.velocity||BABYLON.Vector3.Zero(),blocked:0}:null;
   }
-  view.movement = { target, velocity: view.movement?.velocity || BABYLON.Vector3.Zero() };
-  view.movingUntil = Number.POSITIVE_INFINITY;
-  view.locationId = locationId;
+  view.locationId=locationId;view.idleUntil=performance.now()+5000+Math.random()*5000;
 }
 
 function updateCharacterSteering(view, deltaSeconds) {
-  if (!view.movement) return 0;
-  const flatPosition = new BABYLON.Vector3(view.root.position.x, 0, view.root.position.z);
-  const delta = view.movement.target.subtract(flatPosition); delta.y = 0;
-  const distance = delta.length();
-  if (distance < .3) {
-    view.root.position.x = view.movement.target.x; view.root.position.z = view.movement.target.z;
-    view.movement = null; view.movingUntil = 0;
+  const now=performance.now();
+  if(view.portalUntil>now){const t=1-(view.portalUntil-now)/850;view.root.scaling.setAll(Math.max(.06,Math.abs(t*2-1)));return 0;}
+  view.root.scaling.setAll(1);
+  if(!view.movement){
+    if(now>view.idleUntil&&now>view.gestureUntil&&!worldView.paused&&now>view.talkingUntil)moveCharacter(view,view.locationId);
     return 0;
   }
-  const desiredSpeed = STEERING.maxSpeed * Math.min(1, distance / STEERING.arrivalRadius);
-  let desired = delta.normalize().scale(desiredSpeed);
-  let separation = BABYLON.Vector3.Zero();
-  for (const other of worldView.characters.values()) {
-    if (other === view) continue;
-    const away = flatPosition.subtract(new BABYLON.Vector3(other.root.position.x,0,other.root.position.z));
-    const gap = away.length();
-    if (gap > .01 && gap < STEERING.separationRadius) separation.addInPlace(away.normalize().scale((STEERING.separationRadius-gap)*2.2));
+  if(worldView.paused)return 0;
+  const move=view.movement,waypoint=move.path[move.index];
+  if(!waypoint){view.movement=null;return 0;}
+  const delta=new BABYLON.Vector3(waypoint.x-view.root.position.x,0,waypoint.z-view.root.position.z);
+  const distance=delta.length(),last=move.index===move.path.length-1;
+  if(distance<(last?.18:.08)){
+    if(last){view.movement=null;view.idleUntil=now+3000+Math.random()*5500;return 0;}
+    move.index++;return move.velocity.length();
   }
-  desired = desired.add(separation);
-  const blend = Math.min(1, STEERING.acceleration * deltaSeconds);
-  view.movement.velocity = BABYLON.Vector3.Lerp(view.movement.velocity, desired, blend);
-  const step = view.movement.velocity.scale(deltaSeconds);
-  if (step.length() > distance) step.copyFrom(delta);
-  view.root.position.addInPlace(step);
-  const speed = view.movement.velocity.length();
-  if (speed > .05) {
-    const targetRotation = Math.atan2(view.movement.velocity.x, view.movement.velocity.z);
-    let turn = targetRotation - view.root.rotation.y;
-    turn = Math.atan2(Math.sin(turn), Math.cos(turn));
-    view.root.rotation.y += turn * Math.min(1, deltaSeconds * 5.5);
+  const desired=delta.normalize().scale(view.speed*Math.min(1,distance/(last?1.3:.55)));
+  const separationRadius=1.35;
+  for(const other of worldView.characters.values()){
+    if(other===view||other.group!==view.group)continue;
+    const away=view.root.position.subtract(other.root.position);away.y=0;const gap=away.length();
+    if(gap>.01&&gap<separationRadius)desired.addInPlace(away.scale((separationRadius-gap)/gap*2));
   }
-  return speed;
+  move.velocity=BABYLON.Vector3.Lerp(move.velocity,desired,1-Math.exp(-deltaSeconds*7));
+  const step=move.velocity.scale(deltaSeconds),p=view.root.position;
+  let candidate={x:p.x+step.x,z:p.z+step.z};
+  if(!worldView.navigation.line(p,candidate,view.group)){
+    // At tight corners, discard inertial sideways drift and follow the clear
+    // route tangent. Sliding along a wall can otherwise stall forever.
+    const tangent=delta.scale(Math.min(distance,view.speed*deltaSeconds));
+    candidate={x:p.x+tangent.x,z:p.z+tangent.z};
+    move.velocity=tangent.scale(1/Math.max(.001,deltaSeconds));
+    if(!worldView.navigation.line(p,candidate,view.group)){
+      move.velocity.scaleInPlace(.2);move.blocked+=deltaSeconds;
+      if(move.blocked>.8){
+        const path=worldView.navigation.route(p,move.path[move.path.length-1],view.group);
+        view.movement=path.length?{path,index:1,velocity:BABYLON.Vector3.Zero(),blocked:0}:null;
+      }
+      return 0;
+    }
+  }
+  const actual=Math.hypot(candidate.x-p.x,candidate.z-p.z)/Math.max(.001,deltaSeconds);
+  move.blocked=0;
+  p.x=candidate.x;p.z=candidate.z;
+  const targetRotation=Math.atan2(-move.velocity.x,-move.velocity.z);
+  const turn=Math.atan2(Math.sin(targetRotation-view.root.rotation.y),Math.cos(targetRotation-view.root.rotation.y));
+  view.root.rotation.y+=turn*(1-Math.exp(-deltaSeconds*8));
+  return actual;
 }
 
 function syncObjects(objects) {
@@ -661,7 +379,7 @@ function updateSystemLighting(systems) {
   const stability = Number(systems.digital_stability ?? 1);
   worldView.scene.imageProcessingConfiguration.contrast = 1.02 + stability * .14;
   worldView.showLights.forEach((light, index) => {
-    light.intensity = 38 + Number(systems.audience_excitement ?? .4) * 42 + index * 3;
+    light.intensity = .45 + Number(systems.audience_excitement ?? .4) * .5 + index * .04;
   });
 }
 
@@ -688,7 +406,7 @@ function updateWeather(weather, isNight) {
   worldView.scene.clearColor = new BABYLON.Color4(...palette, 1);
   worldView.scene.fogColor = new BABYLON.Color3(...palette);
   worldView.scene.fogDensity = weather === "fog" ? .026 : weather === "storm" ? .011 : .005;
-  worldView.sun.intensity = isNight ? .25 : weather === "storm" ? .55 : 1.25;
+  worldView.sun.intensity = isNight ? .65 : weather === "storm" ? .85 : 1.3;
   worldView.rain.emitRate = weather === "storm" ? 850 : weather === "rain" ? 450 : 0;
 }
 
@@ -696,36 +414,13 @@ function animateWorld() {
   const now = performance.now();
   const deltaSeconds = Math.min(.05, (worldView.engine?.getDeltaTime() || 16) / 1000);
   if (worldView.caine) {
-    worldView.caine.position.y = 10.5 + Math.sin(now * .0017) * .45;
-    worldView.caine.rotation.y = Math.sin(now * .0007) * .12;
+    worldView.caine.position.y = 8.5 + Math.sin(now * .0017) * .45;
+    worldView.caine.rotation.y = Math.PI + Math.sin(now * .0007) * .12;
   }
-  for (const view of worldView.characters.values()) {
-    const movementSpeed = updateCharacterSteering(view, deltaSeconds);
-    const walking = movementSpeed > .08;
-    const talking = now < view.talkingUntil;
-    view.stepPhase += movementSpeed * deltaSeconds * 2.35;
-    const swing = walking ? Math.sin(view.stepPhase) * Math.min(.62, .16 + movementSpeed*.065) : talking ? Math.sin(now * .018) * .2 : Math.sin(now * .002) * .025;
-    view.leftArm.rotation.x = swing; view.rightArm.rotation.x = -swing;
-    view.leftLeg.rotation.x = -swing; view.rightLeg.rotation.x = swing;
-    const expression = view.expression;
-    const blink = now % (3100 + view.root.uniqueId * 17) < 110 ? .08 : 1;
-    const eyeTarget = (expression === "fear" || expression === "anxiety" ? 1.38 : expression === "anger" ? .55 : expression === "happiness" ? .76 : 1) * blink;
-    view.eyes.forEach(eye => { eye.scaling.y += (eyeTarget - eye.scaling.y) * .22; });
-    const headTilt = expression === "curiosity" ? .13 : expression === "loneliness" ? -.1 : expression === "anger" ? -.06 : 0;
-    view.heads.forEach(head => { head.rotation.z += (headTilt - head.rotation.z) * .08; });
-    view.mouth.scaling.x += ((expression === "happiness" ? 1.35 : expression === "fear" ? .55 : expression === "anger" ? .9 : 1) - view.mouth.scaling.x) * .12;
-    view.mouth.scaling.y += ((expression === "fear" || expression === "anxiety" ? 3.4 : 1) - view.mouth.scaling.y) * .12;
-    const browAngle = expression === "anger" ? .24 : expression === "fear" || expression === "anxiety" ? -.2 : 0;
-    view.brows[0].rotation.z += (browAngle - view.brows[0].rotation.z) * .13;
-    view.brows[1].rotation.z += (-browAngle - view.brows[1].rotation.z) * .13;
-    if (now >= view.gestureUntil) {
-      const armPosture = expression === "fear" ? .28 : expression === "anger" ? -.18 : expression === "happiness" ? .12 : 0;
-      view.leftArm.rotation.z += (-armPosture - view.leftArm.rotation.z) * .08;
-      view.rightArm.rotation.z += (armPosture - view.rightArm.rotation.z) * .08;
-    }
-    view.root.position.y = walking
-      ? Math.abs(Math.sin(view.stepPhase*2)) * .055
-      : Math.sin(now * (talking ? .007 : .0015) + view.root.uniqueId) * (talking ? .055 : .025);
+  for(const view of worldView.characters.values()){
+    const speed=updateCharacterSteering(view,deltaSeconds);
+    view.stepPhase+=speed*deltaSeconds*2.4;
+    CircusArt.animate(view,now,deltaSeconds,speed);
   }
   for (const object of worldView.objects.values()) object.mesh.rotation.y += .008;
   worldView.gloinks.forEach((gloink, index) => {
@@ -739,7 +434,8 @@ function animateWorld() {
   worldView.showLights.forEach((light, index) => { light.direction.x = Math.sin(now*.00035 + index*2) * .35; });
   if (now - performanceState.lastCheck > 3000 && worldView.engine) {
     const fps = worldView.engine.getFps();
-    const nextQuality = fps < 34 ? 1.6 : fps < 48 ? 1.25 : fps > 57 ? 1 : performanceState.quality;
+    const nextQuality = fps < 20 ? 2 : fps < 34 ? 1.6 : fps < 48 ? 1.25 : fps > 57 ? 1 : performanceState.quality;
+    worldView.scene.shadowsEnabled = fps >= 25;
     if (nextQuality !== performanceState.quality) {
       performanceState.quality = nextQuality;
       worldView.engine.setHardwareScalingLevel(nextQuality);
@@ -754,7 +450,7 @@ function updateCameraDirector(now) {
   if (!cameraDirector.enabled || now < cameraDirector.manualUntil) return;
   if (cameraDirector.followId && now < cameraDirector.followUntil) {
     const target = worldView.characters.get(cameraDirector.followId)?.root.position;
-    if (target) worldView.camera.target = BABYLON.Vector3.Lerp(worldView.camera.target, target, .035);
+    if (target) worldView.camera.target = BABYLON.Vector3.Lerp(worldView.camera.target, target.add(new BABYLON.Vector3(0,2.5,0)), .035);
   } else if (now - cameraDirector.lastShotAt > 22000 && worldView.state) {
     const adventure = worldView.state.adventures?.find(item => item.status === "active");
     const targetId = adventure?.participants?.[0];
@@ -764,7 +460,7 @@ function updateCameraDirector(now) {
 }
 
 function screenPoint(position) {
-  const viewport = worldView.camera.viewport.toGlobal(worldView.engine.getRenderWidth(), worldView.engine.getRenderHeight());
+  const viewport = worldView.camera.viewport.toGlobal(ui.canvas.clientWidth, ui.canvas.clientHeight);
   return BABYLON.Vector3.Project(position, BABYLON.Matrix.Identity(), worldView.scene.getTransformMatrix(), viewport);
 }
 
@@ -772,13 +468,15 @@ function positionOverlays() {
   for (const location of worldView.locations.values()) {
     const point = screenPoint(location.root.position.add(location.anchor));
     location.label.style.left = `${point.x}px`; location.label.style.top = `${point.y}px`;
-    location.label.style.opacity = point.z > 0 && point.z < 1 ? "1" : "0";
+    const near=BABYLON.Vector3.Distance(location.root.position,worldView.camera.target)<35;
+    location.label.style.opacity = near && point.z > 0 && point.z < 1 && point.y > 100 ? "1" : "0";
   }
   for (const bubble of ui.speech.children) {
     const view = worldView.characters.get(bubble.dataset.actor);
     const speaker = view?.root || (bubble.dataset.actor === "caine" ? worldView.caine : null);
     if (!speaker) continue;
-    const point = screenPoint(speaker.position.add(new BABYLON.Vector3(0, view ? 4.7 : 5.8, 0)));
+    const point = screenPoint(speaker.position.add(new BABYLON.Vector3(0, view ? 5.8 : 2.8, 0)));
+    bubble.style.visibility=point.z>0&&point.z<1&&point.y>130&&point.y<ui.canvas.clientHeight-150?"visible":"hidden";
     bubble.style.left = `${point.x}px`; bubble.style.top = `${point.y}px`;
   }
 }
@@ -942,20 +640,11 @@ function animateEvents(events) {
 }
 
 function animateAction(event) {
-  const view = worldView.characters.get(event.actor_id); if (!view || event.kind === "moved") return;
-  view.gestureUntil = performance.now() + 1200;
-  if (["spoke", "lied", "helped"].includes(event.kind)) {
-    const arm = event.kind === "helped" ? view.leftArm : view.rightArm;
-    BABYLON.Animation.CreateAndStartAnimation("gesture", arm, "rotation.z", 30, 24, 0, event.kind === "lied" ? -1.2 : 1.1, BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
-  } else if (["searched", "inspected", "explored", "object_discovered"].includes(event.kind)) {
-    BABYLON.Animation.CreateAndStartAnimation("look-around", view.root, "rotation.y", 30, 36, view.root.rotation.y-.5, view.root.rotation.y+.5, BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
-    pulseCharacter(event.actor_id);
-  } else if (["item_picked_up", "item_dropped", "item_used"].includes(event.kind)) {
-    BABYLON.Animation.CreateAndStartAnimation("reach", view.root, "scaling.y", 30, 18, 1, .72, BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
-  } else if (["rested", "slept"].includes(event.kind)) {
-    BABYLON.Animation.CreateAndStartAnimation("rest", view.root, "rotation.z", 30, 28, 0, event.kind === "slept" ? .7 : .25, BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
-  } else {
-    pulseCharacter(event.actor_id);
+  const view=worldView.characters.get(event.actor_id);if(!view)return;
+  view.gesture=event.kind;view.gestureUntil=performance.now()+1600;
+  if(["spoke","lied","helped"].includes(event.kind)){
+    const other=worldView.characters.get(event.data?.target_id);
+    if(other&&!view.movement){const d=other.root.position.subtract(view.root.position);if(d.length()>.1)view.root.rotation.y=Math.atan2(-d.x,-d.z);}
   }
 }
 
@@ -963,7 +652,7 @@ function directCamera(events) {
   if (!cameraDirector.enabled || performance.now() < cameraDirector.manualUntil || !events.length) return;
   const score = event => event.importance + (event.kind.includes("adventure") ? .6 : event.kind === "spoke" ? .18 : event.kind === "weather_changed" ? .3 : 0);
   const focus = events.slice().sort((a,b) => score(b)-score(a))[0];
-  if (!focus) return;
+  if (!focus || performance.now()-cameraDirector.lastShotAt < 7000) return;
   if (focus.actor_id) {
     const targetId = focus.data?.target_id;
     if (targetId && worldView.characters.has(targetId) && ["spoke","lied","helped"].includes(focus.kind)) frameConversation(focus.actor_id, targetId);
@@ -993,7 +682,7 @@ function frameLocation(locationId, shot = "wide") {
 }
 
 function framePoint(point, shot) {
-  const radius = shot === "close" ? 17 : shot === "wide" ? 46 : 27;
+  const radius = shot === "grounds" ? 110 : shot === "close" ? 13 : shot === "wide" ? 55 : 24;
   const ease = new BABYLON.CubicEase(); ease.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
   BABYLON.Animation.CreateAndStartAnimation("cinematic-target", worldView.camera, "target", 30, 42, worldView.camera.target.clone(), point.clone(), BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
   BABYLON.Animation.CreateAndStartAnimation("cinematic-radius", worldView.camera, "radius", 30, 42, worldView.camera.radius, radius, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
@@ -1054,14 +743,14 @@ function pulseLocation(locationId) {
 }
 
 function pulseCharacter(actorId) {
-  const view = worldView.characters.get(actorId); if (!view) return;
-  BABYLON.Animation.CreateAndStartAnimation("character-pulse", view.root, "scaling", 30, 22, BABYLON.Vector3.One(), new BABYLON.Vector3(1.14,1.14,1.14), BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
+  const view=worldView.characters.get(actorId);if(view){view.gesture="inspected";view.gestureUntil=performance.now()+1000;}
 }
 
 function focusCharacter(characterId) {
   const view = worldView.characters.get(characterId); if (!view) return;
-  const ease = new BABYLON.CubicEase(); ease.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
-  BABYLON.Animation.CreateAndStartAnimation("camera-focus", worldView.camera, "target", 30, 35, worldView.camera.target.clone(), view.root.position.clone(), BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
+  cameraDirector.followId=characterId;cameraDirector.followUntil=performance.now()+60000;
+  cameraDirector.manualUntil=0;
+  framePoint(view.root.position.add(new BABYLON.Vector3(0,2.5,0)), "close");
 }
 
 function showNotice(message) {
@@ -1100,7 +789,7 @@ function connect() {
     socket.send(JSON.stringify({ type: "protocol_ack", message_id: message.message_id }));
     if (message.type === "snapshot") { applyState(message.state); addEvents(message.state.events || [], true); }
     else if (message.type === "tick") { applyState(message.state); addEvents(message.events || []); animateEvents(message.events || []); }
-    else if (message.type === "control_state") { ui.pause.textContent = message.paused ? "Resume" : "Pause"; ui.speed.value = String(message.speed); }
+    else if (message.type === "control_state") { worldView.paused = message.paused; ui.pause.textContent = message.paused ? "Resume" : "Pause"; ui.speed.value = String(message.speed); }
     else if (message.type === "resumed") setConnection("live", message.replayed ? `Live · replayed ${message.replayed}` : "Live · synced");
     else if (message.type === "heartbeat") setConnection("live", "Live · synced");
     else if (message.type === "error") showNotice(message.message);
@@ -1113,6 +802,14 @@ function connect() {
 }
 
 ui.pause.addEventListener("click", () => sendControl("paused", ui.pause.textContent === "Pause"));
+document.getElementById("view-hub").addEventListener("click",()=>{
+  cameraDirector.followId=null;cameraDirector.manualUntil=performance.now()+60000;
+  framePoint(new BABYLON.Vector3(0,2,35),"grounds");
+});
+document.getElementById("view-cast").addEventListener("click",()=>focusCharacter("pomni"));
+document.getElementById("hide-panels").addEventListener("click",event=>{
+  const hidden=document.body.classList.toggle("cinema-view");event.target.textContent=hidden?"Show panels":"Cinema view";event.target.setAttribute("aria-pressed",String(hidden));
+});
 ui.speed.addEventListener("change", () => sendControl("speed", Number(ui.speed.value)));
 ui.voices.addEventListener("click", () => {
   voiceState.enabled = !voiceState.enabled;

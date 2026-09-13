@@ -71,7 +71,7 @@ def test_browser_uses_free_steering_and_expanded_procedural_worlds() -> None:
     assert "NAV_ROUTES" not in WEB_SCRIPT
     assert "updateCharacterSteering" in WEB_SCRIPT
     assert "separationRadius" in WEB_SCRIPT
-    assert "portal-depart" in WEB_SCRIPT
+    assert "portalUntil" in WEB_SCRIPT
     assert "pocket_world_number" in WEB_SCRIPT
     for location in ("circus_grounds", "rides_promenade", "digital_lake", "portal_gallery", "grand_theater", "void_overlook"):
         assert location in WEB_SCRIPT

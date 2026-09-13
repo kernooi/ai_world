@@ -3,7 +3,7 @@
   --ink: #edf5ed;
   --muted: #9fb1ab;
   --panel: rgba(7, 17, 21, 0.78);
-  --line: rgba(210, 237, 218, 0.13);
+  --line: rgba(246, 209, 143, 0.18);
   --mint: #66e1e5;
   --amber: #ffd44f;
   --danger: #ed8b79;
@@ -32,7 +32,7 @@ button, select { font: inherit; }
 }
 
 .glass {
-  background: linear-gradient(145deg, rgba(13, 27, 31, .86), rgba(5, 13, 18, .74));
+  background: linear-gradient(145deg, rgba(38, 20, 49, .91), rgba(23, 14, 32, .85));
   border: 1px solid var(--line);
   box-shadow: 0 18px 48px rgba(0, 0, 0, .22), inset 0 1px rgba(255, 255, 255, .035);
   backdrop-filter: blur(18px) saturate(120%);
@@ -92,18 +92,18 @@ h1, h2, p { margin: 0; }
   z-index: 15;
   top: 102px;
   left: 18px;
-  width: min(318px, calc(100vw - 36px));
+  width: min(260px, calc(100vw - 36px));
   max-height: calc(100vh - 294px);
-  padding: 17px;
+  padding: 13px;
   border-radius: 20px;
   overflow: hidden;
 }
 
 .panel-heading, .event-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.eyebrow { color: #88a49b; font-size: 9px; text-transform: uppercase; letter-spacing: .18em; }
+.eyebrow { color: #dfb771; font-size: 9px; text-transform: uppercase; letter-spacing: .18em; }
 h2 { margin-top: 3px; font-size: 17px; font-weight: 650; }
 .count { min-width: 28px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--mint); font-size: 11px; text-align: center; }
-.character-list { margin-top: 12px; display: grid; gap: 8px; overflow: auto; max-height: calc(100vh - 380px); }
+.character-list { margin-top: 12px; display: grid; gap: 8px; overflow: auto; max-height: calc(100vh - 350px); }
 
 .character-card {
   width: 100%;
@@ -122,8 +122,8 @@ h2 { margin-top: 3px; font-size: 17px; font-weight: 650; }
 .character-name { font-size: 13px; font-weight: 650; }
 .character-place { display: block; color: var(--muted); margin-top: 2px; font-size: 10px; }
 .emotion { margin-left: auto; align-self: flex-start; color: var(--mint); font-size: 10px; text-transform: capitalize; }
-.intention { margin: 9px 0 8px; color: #dbe7df; font-size: 11px; line-height: 1.4; }
-.psychology-line { margin: -3px 0 8px; color: #819a91; font-size: 8px; text-transform: uppercase; letter-spacing: .055em; }
+.intention { margin: 7px 0; color: #eee0e2; font-size: 10px; line-height: 1.4; }
+.psychology-line { display: none; }
 .energy-row { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
 .energy-track { flex: 1; height: 3px; overflow: hidden; border-radius: 9px; background: rgba(255,255,255,.09); }
 .energy-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #73b990, #c3e39d); }
@@ -221,6 +221,16 @@ h2 { margin-top: 3px; font-size: 17px; font-weight: 650; }
 @keyframes glitch-flash { 0%,100% { opacity: 0; transform: translateX(0); } 18% { opacity: .75; transform: translateX(7px); } 38% { opacity: .2; transform: translateX(-9px); } 62% { opacity: .58; transform: translateX(3px); } }
 .hidden { opacity: 0; pointer-events: none; transform: translateY(-8px); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+.adventure-panel { max-height: calc(100vh - 304px); overflow-y: auto; width: 284px; }
+.world-systems { display: none; }
+.brand h1 { font-family: Georgia, serif; letter-spacing: .02em; color: #ffe2aa; }
+.character-card { border: 1px solid rgba(231,180,126,.08); }
+.cinema-view .character-panel, .cinema-view .adventure-panel, .cinema-view .topbar, .cinema-view #location-labels { display: none; }
+.cinema-view .event-console { height: 58px; background: rgba(23,14,32,.55); }
+.cinema-view .event-list, .cinema-view .event-head > div:first-child, .cinema-view .camera-help { display:none; }
+.cinema-view .event-head { justify-content: center; }
+@media (prefers-reduced-motion: reduce) { #vfx-flash { display:none; } }
 
 @media (max-width: 780px) {
   .topbar { top: 8px; left: 8px; right: 8px; }
