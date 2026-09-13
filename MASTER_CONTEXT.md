@@ -376,7 +376,7 @@ The LLM selects a high-level action. The simulation executes it.
 
 Critical architectural rule:
 
-> The LLM is the character's high-level brain. Unreal Engine is the character's body and physical executor.
+> The LLM is the character's high-level brain. The browser renderer is the character's visual body and animation executor.
 
 Example:
 
@@ -387,8 +387,8 @@ AI:
 Action:
 move_to("cave")
         ↓
-Unreal:
-calculate path
+Web renderer:
+animate the validated route
         ↓
 Character:
 walks to cave
@@ -708,7 +708,7 @@ Events trigger relevant AI updates.
 Use a centralized event bus.
 
 ```text
-Unreal
+Browser observer
    ↓
 Event Bus
    ↓
@@ -774,7 +774,7 @@ Voice generation
         ↓
 Audio
         ↓
-Unreal playback
+Browser playback
 ```
 
 Each character should have distinct:
@@ -803,15 +803,15 @@ sadness → subdued movement
 confusion → facial expression
 ```
 
-LLM outputs high-level emotional/intent state. Unreal maps it to animation.
+LLM outputs high-level emotional/intent state. The web client maps it to animation.
 
 ---
 
 ## 24. Recommended Technology Stack
 
-### Game Engine
+### 3D Presentation
 
-**Unreal Engine 5**
+**Babylon.js in the browser**
 
 Responsibilities:
 
@@ -873,12 +873,12 @@ Use a vector-enabled database or semantic retrieval mechanism for relevant memor
 
 ### Communication
 
-Use REST and/or WebSockets between Unreal and the backend.
+Use REST and WebSockets between the browser and the backend.
 
 Conceptually:
 
 ```text
-Unreal
+Browser
    ↕
 WebSocket / API
    ↕
@@ -1297,7 +1297,7 @@ Test:
 
 ### Integration
 
-- Unreal ↔ backend
+- Browser ↔ backend
 - event synchronization
 - action execution
 - state persistence
@@ -1373,7 +1373,7 @@ Expected result: a runnable backend with basic services.
 
 ## STAGE 1 — Pure Text World
 
-No Unreal Engine.
+No 3D presentation yet.
 
 Create a tiny Python world.
 
@@ -1553,32 +1553,42 @@ The outcome comes from character decisions.
 
 ---
 
-## STAGE 9 — Unreal Integration
+## STAGE 9 — Browser 3D Integration
 
-Connect backend to Unreal Engine.
+Connect the Python backend to a browser-native Babylon.js presentation through FastAPI.
 
-Start with:
+The active theme is a detailed indoor digital circus. Start with:
 
 ```text
-small village
-forest
-three characters
+striped main circus tent
+center stage, bedroom hall, dining hall, and backstage props
+adventure portal
+Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
+Caine as the Director
 ```
 
 Python simulation remains authoritative for AI state.
 
-Unreal visualizes and executes physical actions.
+The web client procedurally creates the environment and character bodies, then visualizes
+validated movement, actions, dialogue, adventures, time, and weather. No manual 3D modelling
+or engine editor work is required.
+
+Provide a one-click launcher, automatic browser opening, autosave, reconnect snapshots,
+and observer-only pause/playback-speed controls.
+
+Caine creates at most one event per in-world day. He creates conditions and adventures,
+never character actions or predetermined outcomes.
 
 ---
 
-## STAGE 10 — Navigation and Character Bodies
+## STAGE 10 — Rich Navigation and Character Bodies
 
 Implement:
 
 ```text
-NavMesh
-movement
-pathfinding
+route interpolation
+movement transitions
+procedural pathfinding
 interaction
 collision
 basic animation
@@ -1590,7 +1600,7 @@ Example:
 AI:
 move_to(cave)
 
-Unreal:
+Browser:
 character walks to cave
 ```
 
@@ -1598,7 +1608,7 @@ character walks to cave
 
 ## STAGE 11 — Real-Time Synchronization
 
-Build robust backend ↔ Unreal communication.
+Build robust backend ↔ browser communication.
 
 Synchronize:
 
@@ -2106,7 +2116,7 @@ Prefer small, reviewable changes over massive rewrites.
 8. Goals can conflict.
 9. The Director creates conditions, not predetermined behavior.
 10. The user is an observer.
-11. Low-level movement and animation are handled by Unreal.
+11. Low-level movement and animation are handled by the browser renderer.
 12. LLM reasoning is high-level and event-driven.
 13. AI calls are asynchronous.
 14. The system must survive AI/network/model failures.
@@ -2133,9 +2143,9 @@ Use this as the initial instruction after the repository is created:
 >
 > The user is an observer and cannot directly control or interact with the characters during normal operation.
 >
-> The final system will have a 3D representation using Unreal Engine, while the AI simulation and orchestration will initially be implemented independently in Python.
+> The final system will have a browser-native 3D representation, while the AI simulation and orchestration remain independently implemented in Python.
 >
-> Build the project incrementally, beginning with a small text-based simulation before introducing the 3D engine.
+> Build the project incrementally, beginning with a small text-based simulation before introducing browser 3D.
 >
 > Treat the world simulator as authoritative.
 >

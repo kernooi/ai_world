@@ -7,10 +7,10 @@ import random
 from dataclasses import asdict
 from typing import Any
 
-from autonomous_ai_world.adventures import AdventureManager
+from autonomous_ai_world.adventures import AdventureManager, CIRCUS_ADVENTURES
 from autonomous_ai_world.agents import AgentTendencies, CharacterAgent
 from autonomous_ai_world.config import Settings
-from autonomous_ai_world.director import DirectorAgent
+from autonomous_ai_world.director import CIRCUS_SITUATIONS, DirectorAgent
 from autonomous_ai_world.memory import MemoryManager
 from autonomous_ai_world.models import (
     Action,
@@ -273,7 +273,11 @@ class Simulation:
             },
             "memory": self.memory.to_dict(),
             "director": {
+                "name": self.director.name,
+                "interval": self.director.interval,
+                "once_per_day": self.director.once_per_day,
                 "last_intervention_tick": self.director.last_intervention_tick,
+                "last_intervention_day": self.director.last_intervention_day,
                 "created": self.director._created,
             },
             "adventures_enabled": self.adventures is not None,
@@ -381,14 +385,18 @@ class Simulation:
             if data.get("adventures_enabled", bool(adventures))
             else None
         )
+        raw_director = data.get("director", {})
         director = DirectorAgent(
             random.Random(master_rng.getrandbits(64)),
+            interval=int(raw_director.get("interval", 3)),
             provider=settings.create_provider(),
             timeout_seconds=settings.ai_timeout_seconds,
             adventure_manager=adventure_manager,
+            name=str(raw_director.get("name", "Director")),
+            once_per_day=bool(raw_director.get("once_per_day", False)),
         )
-        raw_director = data.get("director", {})
         director.last_intervention_tick = raw_director.get("last_intervention_tick")
+        director.last_intervention_day = raw_director.get("last_intervention_day")
         director._created = int(raw_director.get("created", 0))
         director.last_observed_tick = world.tick
         director.last_generated_event = next(
@@ -596,5 +604,138 @@ def create_default_simulation(
         provider=settings.create_provider(),
         timeout_seconds=settings.ai_timeout_seconds,
         adventure_manager=adventure_manager,
+    )
+    return Simulation(world, agents, director, adventures=adventure_manager)
+
+
+def create_circus_simulation(
+    seed: int | None = None,
+    settings: Settings | None = None,
+    *,
+    enable_adventures: bool = True,
+) -> Simulation:
+    """Construct the six-character Digital Circus observer world."""
+    master_rng = random.Random(seed)
+    settings = settings or Settings()
+    locations = [
+        Location(
+            "main_tent", "Main Circus Tent",
+            "A vast candy-striped tent filled with three rings, trapezes, lights, and impossible doors.",
+            exits={"center_stage", "bedroom_hall", "dining_hall", "backstage"},
+            features={"three_rings": "Three glowing circus rings rearrange themselves between acts."},
+            danger=0.12,
+        ),
+        Location(
+            "center_stage", "Center Stage",
+            "A gold-starred performance ring beneath Caine's enormous floating proscenium.",
+            exits={"main_tent", "backstage"},
+            features={"spotlight_console": "Colorful buttons point spotlights at whoever looks most nervous."},
+            danger=0.25,
+        ),
+        Location(
+            "bedroom_hall", "Bedroom Hall",
+            "A curved hallway of personalized doors, rubbery carpet, portraits, and an EXIT sign that lies.",
+            exits={"main_tent"},
+            features={"false_exit": "The glowing EXIT door opens onto another section of the same hallway."},
+            danger=0.18,
+        ),
+        Location(
+            "dining_hall", "Digital Dining Hall",
+            "A banquet room where glossy food respawns and the long table occasionally tells jokes.",
+            exits={"main_tent"},
+            features={"endless_feast": "Bright cakes and teapots return to their places when nobody watches."},
+            danger=0.08,
+        ),
+        Location(
+            "backstage", "Backstage Prop Maze",
+            "Curtains divide mountains of toy cannons, hoops, masks, ladders, and unlabeled switches.",
+            exits={"main_tent", "center_stage"},
+            features={"prop_crates": "The stacked crates are bigger inside than their painted labels suggest."},
+            danger=0.38,
+        ),
+        Location(
+            "adventure_portal", "Caine's Adventure Portal",
+            "A sealed rainbow doorway leading to whichever pocket world Caine has invented today.",
+            exits=set(), features={}, danger=0.62,
+        ),
+    ]
+
+    pomni = Character(
+        "pomni", "Pomni", "main_tent",
+        personality=Personality(curiosity=.62, bravery=.36, risk_tolerance=.28, empathy=.68, honesty=.82, sociability=.38, independence=.72, impulsiveness=.35),
+        values=("freedom", "truth", "identity"),
+        goals=[Goal("exit", "Find a real way out of the circus", .98, ("discover", "explore")), Goal("stay_sane", "Understand the rules before they change", .8, ("discover",))],
+        fears=("abstraction", "being trapped"), preferences=("clear answers", "quiet corners"),
+        emotions=EmotionalState(happiness=.18, fear=.58, curiosity=.64, anxiety=.78, excitement=.2),
+    )
+    ragatha = Character(
+        "ragatha", "Ragatha", "bedroom_hall",
+        personality=Personality(curiosity=.58, bravery=.62, risk_tolerance=.48, empathy=.96, honesty=.88, patience=.84, sociability=.88, loyalty=.92),
+        values=("kindness", "friendship", "hope"),
+        goals=[Goal("support", "Keep everyone together and feeling safe", .95, ("protect", "social"), "pomni"), Goal("hope", "Find something good in today's adventure", .72, ("discover",))],
+        fears=("friends abstracting",), preferences=("helping", "conversation"),
+    )
+    jax = Character(
+        "jax", "Jax", "center_stage",
+        personality=Personality(curiosity=.7, bravery=.82, risk_tolerance=.9, empathy=.15, honesty=.18, patience=.18, sociability=.8, independence=.88, competitiveness=.93, impulsiveness=.86),
+        values=("amusement", "freedom", "winning"),
+        goals=[Goal("chaos", "Make today's adventure entertaining", .94, ("explore", "resource")), Goal("win", "Be first to claim the best prize", .84, ("discover", "resource"))],
+        fears=("boredom",), preferences=("pranks", "dangerous shortcuts"),
+    )
+    gangle = Character(
+        "gangle", "Gangle", "backstage",
+        personality=Personality(curiosity=.52, bravery=.25, risk_tolerance=.2, empathy=.8, honesty=.87, patience=.72, sociability=.35, loyalty=.66),
+        values=("creativity", "acceptance", "friendship"),
+        goals=[Goal("create", "Find something inspiring among the circus props", .78, ("discover",)), Goal("belong", "Take part without losing another mask", .82, ("social", "protect"))],
+        fears=("broken masks", "ridicule"), preferences=("drawing", "gentle company"),
+        emotions=EmotionalState(happiness=.28, fear=.38, curiosity=.48, anxiety=.52, loneliness=.34),
+    )
+    kinger = Character(
+        "kinger", "Kinger", "dining_hall",
+        personality=Personality(curiosity=.76, bravery=.43, risk_tolerance=.42, empathy=.7, honesty=.78, patience=.48, sociability=.42, independence=.5, impulsiveness=.54),
+        values=("memory", "companionship", "insects"),
+        goals=[Goal("remember", "Recover useful fragments of forgotten knowledge", .86, ("discover",)), Goal("protect", "Protect the others when clarity returns", .7, ("protect", "social"))],
+        fears=("the dark becoming quiet",), preferences=("pillow forts", "insect collections"),
+        emotions=EmotionalState(happiness=.38, fear=.42, curiosity=.76, anxiety=.46, excitement=.44),
+    )
+    zooble = Character(
+        "zooble", "Zooble", "main_tent",
+        personality=Personality(curiosity=.45, bravery=.68, risk_tolerance=.6, empathy=.52, honesty=.76, patience=.22, sociability=.2, independence=.97, competitiveness=.45),
+        values=("autonomy", "honesty", "self-expression"),
+        goals=[Goal("autonomy", "Avoid being pushed into Caine's nonsense", .9, ()), Goal("pieces", "Find parts that finally feel right", .74, ("resource", "discover"))],
+        fears=("losing control",), preferences=("personal space", "direct answers"),
+    )
+    characters = [pomni, ragatha, jax, gangle, kinger, zooble]
+    ragatha.relationships["pomni"] = Relationship(trust=.82, friendship=.8, loyalty=.86, affection=.78)
+    pomni.relationships["ragatha"] = Relationship(trust=.74, friendship=.6)
+    jax.relationships["gangle"] = Relationship(trust=.28, friendship=.34, respect=.42, suspicion=.3)
+    gangle.relationships["jax"] = Relationship(trust=.2, friendship=.25, suspicion=.58, fear=.35)
+    kinger.relationships["ragatha"] = Relationship(trust=.76, friendship=.7, respect=.72)
+    zooble.relationships["jax"] = Relationship(trust=.32, friendship=.3, suspicion=.5)
+
+    objects = [
+        WorldObject("rubber_chicken", "a rubber chicken", "It recites legal disclaimers when squeezed.", "backstage", portable=True, tags={"toy"}),
+        WorldObject("comedy_mask", "a spare comedy mask", "The porcelain smile changes when viewed from the side.", "bedroom_hall", portable=True, tags={"mask", "mystery"}),
+        WorldObject("exit_key", "a pixel key", "A flickering key labelled EXIT, probably dishonestly.", "main_tent", portable=True, hidden=True, tags={"mystery", "valuable"}),
+        WorldObject("digital_cake", "an immaculate digital cake", "Every slice grows back with different frosting.", "dining_hall", portable=False, tags={"food"}, uses_remaining=99),
+    ]
+    world = World(locations, characters, objects=objects)
+    agents = [
+        CharacterAgent(
+            character.id,
+            AgentTendencies(curiosity=character.personality.curiosity, sociability=character.personality.sociability),
+            random.Random(master_rng.getrandbits(64)),
+            provider=settings.create_provider(), timeout_seconds=settings.ai_timeout_seconds,
+        )
+        for character in characters
+    ]
+    adventure_manager = (
+        AdventureManager(random.Random(master_rng.getrandbits(64)), CIRCUS_ADVENTURES)
+        if enable_adventures else None
+    )
+    director = DirectorAgent(
+        random.Random(master_rng.getrandbits(64)), situations=CIRCUS_SITUATIONS,
+        provider=settings.create_provider(), timeout_seconds=settings.ai_timeout_seconds,
+        adventure_manager=adventure_manager, name="Caine", once_per_day=True,
     )
     return Simulation(world, agents, director, adventures=adventure_manager)

@@ -1,21 +1,31 @@
 # Autonomous AI World
 
-A runnable, observer-only Python simulation implementing the project through
-**Stage 8 - Emergent Adventures**. Three independent characters perceive a small world,
+A runnable, observer-only simulation implementing the project through
+**Stage 9 - Browser 3D World**. Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
+independently perceive a detailed digital circus,
 reason from private state through a deterministic mock AI provider, submit
 structured tool actions, experience authoritative consequences, remember events,
-and develop directional relationships. A separate Director periodically introduces
+and develop directional relationships. Caine acts as the Director and introduces
 validated circumstances and multi-step premises without choosing character behavior.
+one validated challenge per world day without choosing character behavior. The live
+state is presented as a procedural 3D world in a normal web browser.
 
-No API key, network service, database server, or Unreal Engine is required.
+No API key, database server, Unreal Engine, 3D models, or manual scene setup is required.
 
 ## Run
 
 Python 3.11 or newer is required.
 
+On Windows, double-click **`start_world.bat`**. The first launch creates an isolated
+environment and installs the web dependencies; after that it starts the simulation
+and opens `http://127.0.0.1:8765` automatically. Keep the small launcher window open
+while watching the world.
+
+Command-line equivalent:
+
 ```powershell
 python -m pip install -e ".[dev]"
-ai-world --steps 12 --seed 7
+ai-world-web
 ```
 
 Useful observer/developer options:
@@ -110,22 +120,37 @@ python -m pytest
   resolving character
 - The Director sees active phase, participants, and inactivity in its compact summary
 
+### Stage 9 - Browser 3D world
+
+- Detailed procedural circus interior with a striped tent shell, checkerboard floor,
+  three rings, bleachers, trapeze, lights, curtains, bedroom doors, dining furniture,
+  backstage props, and a rainbow adventure portal
+- Bespoke procedural bodies for Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
+- A floating procedural Caine presentation above the stage
+- Caine creates at most one validated Director event per in-world calendar day
+- Animated travel, activity pulses, dialogue bubbles, weather, lighting, and rain
+- FastAPI snapshot endpoint and real-time WebSocket event stream
+- Observer dashboard for character intentions, emotion, energy, adventures, and events
+- Observer-only pause and playback-speed controls; no character-control endpoint
+- Automatic reconnect, full-state resynchronization, and atomic autosave to `.runtime/`
+- One-click Windows setup, launch, and browser opening
+
+This is a fan-built procedural interpretation. The repository includes no extracted
+models, textures, audio, scripts, or other production assets from the show.
+
 ## Architecture
 
 ```text
-Observer CLI <- debug/event views <- authoritative World <- persistence repository
-                                        ^       |
-                                        |       +-> event projection
-                      validated Actions |             |-> private memory/knowledge
-                                        |             |-> emotion/relationships
-                          +-------------+-------------+
-                          |                           |
-                  Character agents                Director
-                  independent mock AI       compact summary + mock AI
-                  local perceptions         premises/circumstances only
-                          |                           |
-                          +----> AdventureManager <--+
-                                 event-triggered phases
+Browser 3D observer <- WebSocket/snapshots <- FastAPI host
+                                              |
+                                      authoritative World <-> atomic persistence
+                                              ^       |
+                            validated Actions |       +-> private state projections
+                          +-------------------+-------------------+
+                          |                                       |
+                  Character agents                            Director
+                  independent mock AI                 premises/circumstances only
+                          +----------> AdventureManager <----------+
 ```
 
 The mock provider selects among candidates generated from character state, goals,
@@ -162,7 +187,9 @@ silently making network calls.
 - `persistence.py` - replaceable in-memory and atomic JSON repositories
 - `simulation.py` - async scheduling, state projection, and snapshots
 - `debug.py` - developer inspection without model reasoning traces
+- `web_protocol.py` - observer-safe public JSON projection
+- `web_server.py` - FastAPI host, WebSocket stream, autonomous loop, and autosave
+- `web/` - procedural Babylon.js scene and observer dashboard
 
-See [docs/STAGE_8_ARCHITECTURE.md](docs/STAGE_8_ARCHITECTURE.md) for adventure
-invariants, lifecycle rules, and acceptance boundaries. The Stage 7 document remains
-as the previous architecture milestone.
+See [docs/STAGE_9_WEB_ARCHITECTURE.md](docs/STAGE_9_WEB_ARCHITECTURE.md) for the
+browser boundary, message protocol, and operational behavior.

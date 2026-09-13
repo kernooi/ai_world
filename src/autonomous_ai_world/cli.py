@@ -11,7 +11,7 @@ from autonomous_ai_world.config import Settings
 from autonomous_ai_world.debug import debug_snapshot
 from autonomous_ai_world.models import EventKind
 from autonomous_ai_world.persistence import JsonStateRepository, PersistenceError
-from autonomous_ai_world.simulation import Simulation, create_default_simulation
+from autonomous_ai_world.simulation import Simulation, create_circus_simulation
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,19 +41,19 @@ def main(argv: list[str] | None = None) -> int:
                 JsonStateRepository(args.load_state), seed=args.seed or 0, settings=settings
             )
         else:
-            simulation = create_default_simulation(seed=args.seed, settings=settings)
+            simulation = create_circus_simulation(seed=args.seed, settings=settings)
     except (AIProviderError, PersistenceError) as exc:
         raise SystemExit(str(exc)) from exc
 
     print("=" * 58)
-    print("AUTONOMOUS AI WORLD - STAGE 8 (MOCK AI)")
+    print("THE AUTONOMOUS DIGITAL CIRCUS - STAGE 9 (MOCK AI)")
     print("Observer mode: characters choose their own actions.")
     print("=" * 58)
     for _ in range(args.steps):
         events = simulation.step()
         print(f"\n{simulation.world.time.label} | Weather: {simulation.world.weather.value}")
         for event in events:
-            marker = "DIRECTOR" if event.actor_id is None else event.actor_id.upper()
+            marker = simulation.director.name.upper() if event.actor_id is None else event.actor_id.upper()
             rejected = " [REJECTED]" if event.kind is EventKind.ACTION_REJECTED else ""
             print(f"[{event.sequence:04d}] {marker}{rejected}: {event.summary}")
         if args.delay:
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
             f"intention={intention}; energy={character.energy}"
         )
     print(
-        f"Director: {simulation.director.status}; "
+        f"{simulation.director.name}: {simulation.director.status}; "
         f"cooldown={simulation.director.cooldown_remaining}"
     )
     for adventure in simulation.world.adventures.values():

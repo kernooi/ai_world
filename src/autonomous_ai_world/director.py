@@ -73,6 +73,34 @@ DEFAULT_SITUATIONS = (
     ),
 )
 
+CIRCUS_SITUATIONS = (
+    SituationTemplate(
+        "confetti_storm",
+        "Caine announces a surprise indoor confetti storm",
+        "Every piece of confetti whispers a different clue about a prize hidden in the tent.",
+    ),
+    SituationTemplate(
+        "runaway_teacups",
+        "Caine releases a parade of runaway wind-up teacups",
+        "The teacups race between the rings and demand to be sorted by impossible colors.",
+    ),
+    SituationTemplate(
+        "backward_band",
+        "Caine's invisible big band begins playing backward",
+        "The music makes nearby props float until someone discovers the correct rhythm.",
+    ),
+    SituationTemplate(
+        "gloink_delivery",
+        "Caine schedules a suspicious gloink delivery",
+        "A wobbling parcel marked DEFINITELY SAFE arrives beneath the center spotlight.",
+    ),
+    SituationTemplate(
+        "gravity_matinee",
+        "Caine declares that gravity is optional for today's matinee",
+        "Bright arrows appear on the floor while loose objects drift toward the trapeze.",
+    ),
+)
+
 
 class DirectorAgent:
     """Creates world pressure on a cooldown without selecting character actions."""
@@ -85,6 +113,8 @@ class DirectorAgent:
         provider: AIProvider | None = None,
         timeout_seconds: float = 2.0,
         adventure_manager: AdventureManager | None = None,
+        name: str = "Director",
+        once_per_day: bool = False,
     ) -> None:
         if interval < 1:
             raise ValueError("Director interval must be positive")
@@ -96,21 +126,28 @@ class DirectorAgent:
         self.provider = provider or MockAIProvider()
         self.timeout_seconds = timeout_seconds
         self.adventure_manager = adventure_manager
+        self.name = name
+        self.once_per_day = once_per_day
         self._created = 0
         self.last_intervention_tick: int | None = None
+        self.last_intervention_day: int | None = None
         self.last_generated_event: Event | None = None
         self.last_world_summary: WorldSummary | None = None
         self.last_error: str | None = None
         self.status = "waiting"
         self.last_observed_tick = 0
+        self.last_observed_day = 1
 
     @property
     def cooldown_remaining(self) -> int:
+        if self.once_per_day:
+            return 0 if self.last_intervention_day != self.last_observed_day else 1
         last = self.last_intervention_tick or 0
         return max(0, self.interval - (self.last_observed_tick - last))
 
     def summarize(self, world: World) -> WorldSummary:
         self.last_observed_tick = world.tick
+        self.last_observed_day = world.time.day
         recent = world.events.history[-10:]
         actionable = [
             event
@@ -164,6 +201,8 @@ class DirectorAgent:
         return summary
 
     def _is_due(self, world: World) -> bool:
+        if self.once_per_day:
+            return world.tick > 0 and self.last_intervention_day != world.time.day
         last = self.last_intervention_tick or 0
         return world.tick > 0 and world.tick - last >= self.interval
 
@@ -183,6 +222,7 @@ class DirectorAgent:
             if expired:
                 self.last_generated_event = expired
                 self.last_intervention_tick = world.tick
+                self.last_intervention_day = world.time.day
                 self.status = "adventure_expired"
                 return expired
         summary = self.summarize(world)
@@ -199,6 +239,7 @@ class DirectorAgent:
             if adventure_event:
                 self._created += 1
                 self.last_intervention_tick = world.tick
+                self.last_intervention_day = world.time.day
                 self.last_generated_event = adventure_event
                 self.status = "adventure_started"
                 self.last_error = None
@@ -315,6 +356,7 @@ class DirectorAgent:
             return None
         self._created += 1
         self.last_intervention_tick = world.tick
+        self.last_intervention_day = world.time.day
         self.last_generated_event = event
         self.status = "intervened"
         return event

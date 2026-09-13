@@ -57,6 +57,29 @@ DEFAULT_ADVENTURES = (
     ),
 )
 
+CIRCUS_ADVENTURES = (
+    AdventureTemplate(
+        id="glitching_midway",
+        title="The Glitching Midway",
+        premise="Caine unveils a cheerful midway game whose prizes have begun rewriting the tent.",
+        mystery="Which impossible prize is causing the glitch, and what does it want the cast to play?",
+        stakes="If the game keeps spreading, every room may be folded into an endless obstacle course.",
+        hook_name="laughing_scoreboard",
+        hook_description=(
+            "A neon scoreboard laughs, changes its own rules, and awards points for things nobody did."
+        ),
+        clue_name="a pixelated golden ticket",
+        clue_description=(
+            "The ticket flickers between destinations and points toward Caine's sealed adventure portal."
+        ),
+        hidden_location_id="adventure_portal",
+        escalation_name="impossible_prize_wheel",
+        escalation_description=(
+            "A towering prize wheel spins through symbols that do not fit inside ordinary geometry."
+        ),
+    ),
+)
+
 
 class AdventureManager:
     """Advances premises only in response to authoritative character events."""

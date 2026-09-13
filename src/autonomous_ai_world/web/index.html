@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#081116">
+  <title>The Autonomous Digital Circus</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%2389c99e'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-size='21' font-family='Arial' font-weight='700' fill='%230b211b'%3EAW%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://cdn.babylonjs.com">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <canvas id="world-canvas" aria-label="3D autonomous world"></canvas>
+  <div id="location-labels" aria-hidden="true"></div>
+  <div id="speech-layer" aria-hidden="true"></div>
+
+  <header class="topbar glass">
+    <div class="brand">
+      <span class="brand-mark">ADC</span>
+      <div>
+        <h1>The Autonomous Digital Circus</h1>
+        <p>Caine's live observer console</p>
+      </div>
+    </div>
+    <div class="world-meta">
+      <span id="connection" class="status connecting"><i></i> Connecting</span>
+      <span id="director">Caine · preparing today's adventure</span>
+      <span id="world-time">Day 1 · 08:00</span>
+      <span id="weather">Clear</span>
+      <span id="tick">Tick 0</span>
+    </div>
+  </header>
+
+  <aside class="character-panel glass" aria-label="Characters">
+    <div class="panel-heading">
+      <div>
+        <span class="eyebrow">Independent minds</span>
+        <h2>Characters</h2>
+      </div>
+      <span id="population" class="count">0</span>
+    </div>
+    <div id="characters" class="character-list"></div>
+  </aside>
+
+  <aside id="adventure-panel" class="adventure-panel glass hidden" aria-live="polite">
+    <span class="eyebrow">Caine's daily adventure</span>
+    <h2 id="adventure-title">No active adventure</h2>
+    <p id="adventure-premise"></p>
+    <div id="adventure-phases" class="phases"></div>
+    <p id="adventure-stakes" class="stakes"></p>
+  </aside>
+
+  <section class="event-console glass" aria-label="World event log">
+    <div class="event-head">
+      <div>
+        <span class="eyebrow">World pulse</span>
+        <h2>Live events</h2>
+      </div>
+      <div class="playback">
+        <button id="pause" type="button" title="Pause or resume the simulation">Pause</button>
+        <label>
+          <span class="sr-only">Playback speed</span>
+          <select id="speed" aria-label="Playback speed">
+            <option value="0.5">0.5×</option>
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div id="events" class="event-list" aria-live="polite"></div>
+  </section>
+
+  <div class="camera-help glass">Drag to orbit · Scroll to zoom · Select a character to follow</div>
+  <div id="notice" class="notice hidden" role="alert"></div>
+
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
