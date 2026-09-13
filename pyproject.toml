@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autonomous-ai-world"
-version = "0.20.0"
-description = "A persistent autonomous digital circus with emergent psychology, world systems, and episodes"
+version = "0.21.0"
+description = "A persistent autonomous digital circus with Caine-generated daily quest worlds"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Autonomous AI World contributors" }]

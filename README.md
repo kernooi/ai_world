@@ -1,7 +1,7 @@
 # Autonomous AI World
 
 A runnable, observer-only simulation implementing the project through
-**Stage 20 - Episode System**. Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
+**Stage 20 plus the daily adventure-world overhaul**. Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
 independently perceive a detailed digital circus,
 reason from private state through a deterministic mock AI provider, submit
 structured tool actions, experience authoritative consequences, remember events,
@@ -126,7 +126,7 @@ python -m pytest
   backstage props, and a rainbow adventure portal
 - Bespoke procedural bodies for Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
 - A floating procedural Caine presentation above the stage
-- Caine creates at most one validated Director event per in-world calendar day
+- Caine opens one complete, validated quest world per in-world calendar day
 - Animated travel, activity pulses, dialogue bubbles, weather, lighting, and rain
 - FastAPI snapshot endpoint and real-time WebSocket event stream
 - Observer dashboard for character intentions, emotion, energy, adventures, and events
@@ -184,7 +184,7 @@ models, textures, audio, scripts, or other production assets from the show.
 - Persisted tension, arc stage, quiet-time, character focus, major-event, and expansion state
 - Adventure phase, emotion, activity, and relationship tension drive story pacing
 - Character-development opportunities tailored to each cast member
-- Three multi-stage circus adventure arcs with separate pocket worlds
+- Six rotating multi-stage adventure concepts that generate unique pocket-world instances
 - Escalating major-event candidates and controlled expansion into the Infinite Mirror Maze
 - Every proposal still passes world validation, and Caine still cannot select character actions
 
@@ -226,6 +226,23 @@ models, textures, audio, scripts, or other production assets from the show.
   from authoritative events instead of a fixed script
 - Episodes close on resolution or day boundaries and persist in a durable world chronicle
 - Major consequences remain available independently of the short live event feed
+
+### Daily adventure-world overhaul
+
+- Caine is the primary orchestration AI and announces a complete adventure every world day
+- Every adventure creates a unique three-zone pocket world with its own theme, premise,
+  mystery, stakes, explicit quest objective, portal key, finale, and completion conditions
+- The whole cast hears Caine's announcement, but each character independently chooses how
+  to travel, investigate, cooperate, or complete the objectives
+- Objective progress records the responsible character and drives episodes authoritatively
+- Unfinished worlds close at the next day boundary so Caine can always launch that day's quest
+- The circus is now a large hub spanning the detailed main tent, endless grounds, ride
+  promenade, digital lake, portal gallery, grand theater, backstage, rooms, and void overlook
+- Browser characters use continuous arrival steering, acceleration, turning, and separation;
+  the old hardcoded waypoint table has been removed
+- Portal transitions move characters between the hub and distant generated worlds
+- Mock dialogue is character-specific and grounded in the active quest, location, and recent
+  meaningful events instead of the old three-line generic phrase pool
 
 ## Architecture
 
@@ -290,4 +307,6 @@ for navigation/synchronization/voice, and
 [docs/STAGES_13_15_ARCHITECTURE.md](docs/STAGES_13_15_ARCHITECTURE.md) for expression,
 camera direction, and advanced story pacing, and
 [docs/STAGES_16_20_ARCHITECTURE.md](docs/STAGES_16_20_ARCHITECTURE.md) for persistence,
-world systems, psychology, presentation, and episodes.
+world systems, psychology, presentation, and episodes, and
+[docs/ADVENTURE_WORLD_OVERHAUL.md](docs/ADVENTURE_WORLD_OVERHAUL.md) for Caine's daily
+quest generator, expanded hub, and free-steering presentation.

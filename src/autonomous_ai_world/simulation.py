@@ -32,6 +32,7 @@ from autonomous_ai_world.models import (
     Personality,
     PhysicalState,
     Relationship,
+    QuestObjective,
     Weather,
     WorldObject,
     WorldTime,
@@ -158,6 +159,12 @@ class Simulation:
         if isinstance(target_id, str) and target_id in self.world.characters:
             observers.add(target_id)
         if event.kind is EventKind.WEATHER_CHANGED:
+            observers = set(self.world.characters)
+        if (
+            event.kind is EventKind.ADVENTURE_STARTED
+            and event.actor_id is None
+            and event.data.get("generated_location_ids")
+        ):
             observers = set(self.world.characters)
 
         participants = tuple(
@@ -402,6 +409,11 @@ class Simulation:
                 clue_description=raw["clue_description"],
                 escalation_feature_id=raw["escalation_feature_id"],
                 escalation_description=raw["escalation_description"],
+                world_theme=str(raw.get("world_theme", "mystery")),
+                quest_objective=str(raw.get("quest_objective", "Investigate the world and resolve its central problem.")),
+                generated_location_ids=list(raw.get("generated_location_ids", [])),
+                objectives=[QuestObjective(**objective) for objective in raw.get("objectives", [])],
+                created_day=int(raw.get("created_day", 1)),
                 phase=AdventurePhase(raw["phase"]),
                 status=AdventureStatus(raw["status"]),
                 created_tick=int(raw["created_tick"]),
@@ -733,14 +745,14 @@ def create_circus_simulation(
         Location(
             "main_tent", "Main Circus Tent",
             "A vast candy-striped tent filled with three rings, trapezes, lights, and impossible doors.",
-            exits={"center_stage", "bedroom_hall", "dining_hall", "backstage"},
+            exits={"center_stage", "bedroom_hall", "dining_hall", "backstage", "circus_grounds"},
             features={"three_rings": "Three glowing circus rings rearrange themselves between acts."},
             danger=0.12,
         ),
         Location(
             "center_stage", "Center Stage",
             "A gold-starred performance ring beneath Caine's enormous floating proscenium.",
-            exits={"main_tent", "backstage"},
+            exits={"main_tent", "backstage", "portal_gallery"},
             features={"spotlight_console": "Colorful buttons point spotlights at whoever looks most nervous."},
             danger=0.25,
         ),
@@ -764,6 +776,48 @@ def create_circus_simulation(
             exits={"main_tent", "center_stage"},
             features={"prop_crates": "The stacked crates are bigger inside than their painted labels suggest."},
             danger=0.38,
+        ),
+        Location(
+            "circus_grounds", "Endless Circus Grounds",
+            "A huge outdoor hub surrounds the main tent with winding paths, floating signs, gardens, and distant attractions.",
+            exits={"main_tent", "rides_promenade", "digital_lake", "portal_gallery", "grand_theater", "void_overlook"},
+            features={"living_map": "A giant map redraws the grounds as Caine adds new attractions."},
+            danger=0.1,
+        ),
+        Location(
+            "rides_promenade", "Rides Promenade",
+            "A long neon midway holds a carousel, roller coaster, spinning cups, and booths operated by cheerful mannequins.",
+            exits={"circus_grounds", "grand_theater"},
+            features={"autonomous_carousel": "The carousel chooses its own passengers and destination."},
+            danger=0.2,
+        ),
+        Location(
+            "digital_lake", "Digital Lake",
+            "A broad reflective lake borders a toy beach, a boathouse, and islands shaped like oversized game pieces.",
+            exits={"circus_grounds", "void_overlook"},
+            features={"pixel_boathouse": "Colorful boats assemble themselves from cubes at the dock."},
+            danger=0.18,
+        ),
+        Location(
+            "portal_gallery", "Adventure Portal Gallery",
+            "A vaulted hall contains dozens of dormant doors, each waiting for Caine's next pocket world.",
+            exits={"circus_grounds", "center_stage"},
+            features={"portal_archive": "Miniature windows replay fragments of completed adventures."},
+            danger=0.25,
+        ),
+        Location(
+            "grand_theater", "Grand Digital Theater",
+            "An ornate performance hall with impossible balconies, rehearsal rooms, and a stage larger inside than outside.",
+            exits={"circus_grounds", "rides_promenade"},
+            features={"improv_stage": "The stage generates scenery whenever someone begins a story."},
+            danger=0.16,
+        ),
+        Location(
+            "void_overlook", "Void Overlook",
+            "A fenced garden terrace looks across the colorful grounds toward the silent edge of the simulation.",
+            exits={"circus_grounds", "digital_lake"},
+            features={"boundary_glass": "Transparent panels reveal unfinished geometry beyond the safe grounds."},
+            danger=0.45,
         ),
         Location(
             "adventure_portal", "Caine's Adventure Portal",

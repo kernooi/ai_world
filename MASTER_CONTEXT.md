@@ -1845,6 +1845,23 @@ authoritative events select important characters, major sequences, and memorable
 adventure resolution or a world-day boundary closes the episode with accumulated outcomes.
 The episode list and major consequences are exposed to the observer without private state.
 
+### Current vision — Daily Adventure Worlds
+
+Caine is the main orchestration AI. Every world day he must create and announce a complete
+adventure outside the circus: a new portal-connected world with a distinct theme, premise,
+quest objective, hazards, discoveries, finale, and validated completion conditions. Caine
+manages the scenario and its pacing, while Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
+retain independent decisions and can cooperate, separate, investigate, or fail.
+
+The circus is a large persistent hub rather than a single circular room. It includes the
+detailed main tent, grounds, attractions, lake, portal gallery, theater, private areas, and
+the simulation boundary. Pocket worlds are generated as separate multi-zone spaces.
+
+Browser movement uses continuous steering, acceleration, arrival, turning, and local
+character avoidance. It must not use a table of designated animation paths. Dialogue must
+be grounded in the active objective, personality, memories, relationships, location, and
+meaningful recent events rather than repeating a small generic phrase list.
+
 ---
 
 # 40. MVP Definition

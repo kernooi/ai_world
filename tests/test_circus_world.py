@@ -19,9 +19,11 @@ def test_circus_has_full_cast_and_detailed_connected_interior() -> None:
     }
     assert simulation.director.name == "Caine"
     assert simulation.director.once_per_day is True
-    assert simulation.world.locations["main_tent"].exits == {
+    assert {
         "center_stage", "bedroom_hall", "dining_hall", "backstage"
-    }
+    } < simulation.world.locations["main_tent"].exits
+    assert "circus_grounds" in simulation.world.locations["main_tent"].exits
+    assert len(simulation.world.locations) >= 15
     assert simulation.world.locations["adventure_portal"].exits == set()
 
 

@@ -143,6 +143,11 @@ h2 { margin-top: 3px; font-size: 17px; font-weight: 650; }
 .phases { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 13px; }
 .phase { height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); }
 .phase.done { background: var(--amber); box-shadow: 0 0 10px rgba(237,187,115,.28); }
+.quest-objectives { margin-top: 10px; display: grid; gap: 5px; }
+.quest-objective { display: flex; gap: 7px; align-items: flex-start; color: #aebdb7; font-size: 9px; line-height: 1.3; }
+.quest-objective::before { content: "○"; color: #7e9690; }
+.quest-objective.complete { color: #d8eadc; }
+.quest-objective.complete::before { content: "✓"; color: #79dca0; }
 .stakes { padding-top: 8px; border-top: 1px solid var(--line); color: #a4b4ae !important; }
 .episode-summary { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
 .episode-summary strong { color: #e8f2eb; font-size: 12px; font-weight: 630; }

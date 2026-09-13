@@ -1,4 +1,4 @@
-"""FastAPI host, resilient synchronization, and simulation loop through Stage 20."""
+"""FastAPI host for the Stage 20 world and daily quest-world overhaul."""
 
 from __future__ import annotations
 
@@ -203,7 +203,15 @@ def _load_simulation(config: WebRuntimeConfig) -> tuple[Simulation, JsonStateRep
             if set(restored.world.characters) == expected_cast:
                 current = create_circus_simulation(seed=config.seed, settings=Settings.from_env())
                 for location_id, location in current.world.locations.items():
-                    restored.world.locations.setdefault(location_id, location)
+                    if location_id not in restored.world.locations:
+                        restored.world.locations[location_id] = location
+                for location_id in {
+                    "main_tent", "center_stage", "circus_grounds", "rides_promenade",
+                    "digital_lake", "portal_gallery", "grand_theater", "void_overlook",
+                }:
+                    restored.world.locations[location_id].exits.update(
+                        current.world.locations[location_id].exits
+                    )
                 for character_id, character in restored.world.characters.items():
                     if not character.psychology.beliefs:
                         character.psychology = current.world.characters[character_id].psychology
@@ -241,7 +249,7 @@ def create_app(config: WebRuntimeConfig | None = None) -> FastAPI:
             await runner.stop()
             await connections.stop_heartbeat()
 
-    app = FastAPI(title="The Autonomous Digital Circus", version="0.20.0", lifespan=lifespan)
+    app = FastAPI(title="The Autonomous Digital Circus", version="0.21.0", lifespan=lifespan)
     app.state.runner = runner
 
     @app.get("/api/health")

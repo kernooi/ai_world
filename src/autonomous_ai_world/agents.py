@@ -197,6 +197,8 @@ class CharacterAgent:
             prompted = feature_id in recent_situations
             score = 0.4 + p.curiosity * 0.75 + goal_scores["discover"] * 0.45
             score += 0.5 if prompted else 0.0
+            if any(adventure.get("objective_target_id") == feature_id for adventure in perception.active_adventures):
+                score += 1.0
             score -= character.emotions.fear * (0.2 + perception.location_danger)
             add(
                 ActionKind.INSPECT,
@@ -250,7 +252,7 @@ class CharacterAgent:
                 "connect_with_character",
                 "Sociability, goals, memories, and relationship state favor conversation.",
                 target_id,
-                self.rng.choice(self.tendencies.remarks),
+                self._dialogue_line(character, target_id, perception),
             )
             if perception.nearby_energy.get(target_id, 10) < 5:
                 help_score = (
@@ -284,11 +286,16 @@ class CharacterAgent:
                     "mislead_character",
                     "Low honesty and competitive pressure make deception plausible.",
                     target_id,
-                    "I found nothing valuable nearby.",
+                    self._deception_line(character, perception),
                 )
 
         danger_memory = "danger" in memory_text or "storm" in memory_text
         for destination in perception.exits:
+            quest_move = any(
+                adventure.get("generated_world") == "yes"
+                and adventure.get("next_location_id") == destination
+                for adventure in perception.active_adventures
+            )
             known_danger = any(
                 destination in fact.content.lower() and "danger" in fact.content.lower()
                 for fact in perception.known_facts
@@ -310,11 +317,19 @@ class CharacterAgent:
                     and adventure["hidden_location_id"] == destination
                 ):
                     move_score += 0.45 + (p.curiosity + p.bravery) * 0.25
+                if adventure.get("generated_world") == "yes" and adventure.get("next_location_id") == destination:
+                    move_score += 0.72 + p.bravery * 0.18
+            if perception.homeward_exit_id == destination:
+                move_score += 0.9
             add(
                 ActionKind.MOVE,
                 move_score,
-                "travel_toward_goal",
-                "Exploration goals are balanced against known danger and fear.",
+                "return_to_circus" if perception.homeward_exit_id == destination else "advance_quest" if quest_move else "travel_toward_goal",
+                "The completed quest makes returning through the portal the next priority."
+                if perception.homeward_exit_id == destination
+                else "The active objective identifies this as the next useful part of Caine's world."
+                if quest_move
+                else "Exploration goals are balanced against known danger and fear.",
                 destination,
             )
 
@@ -336,6 +351,79 @@ class CharacterAgent:
         add(ActionKind.REST, 0.15 + (10 - perception.energy) * 0.05, "pause", "Rest preserves energy.")
         candidates.sort(key=lambda item: item[1], reverse=True)
         return candidates
+
+    @staticmethod
+    def _dialogue_line(character: Character, target_id: str, perception: Perception) -> str:
+        adventure = perception.active_adventures[0] if perception.active_adventures else None
+        if adventure:
+            topic = f"{adventure['title']}; our objective is to {str(adventure.get('quest_objective', 'finish the objective')).lower()}"
+        elif interesting := next(
+            (
+                event for event in reversed(perception.recent_events)
+                if event.kind in {
+                    EventKind.ADVENTURE_STARTED, EventKind.ADVENTURE_PROGRESSED,
+                    EventKind.ADVENTURE_RESOLVED, EventKind.OBJECT_DISCOVERED,
+                    EventKind.SITUATION_CREATED, EventKind.ENVIRONMENT_CHANGED,
+                }
+            ),
+            None,
+        ):
+            topic = interesting.summary.rstrip(".")
+        elif perception.features:
+            topic = next(iter(perception.features.values())).rstrip(".")
+        else:
+            topic = f"what is happening in {perception.location_name}"
+        openers = {
+            "pomni": ("Wait, {target}.", "Okay, {target}, listen.", "Does this seem wrong to you, {target}?", "I need a second opinion, {target}."),
+            "ragatha": ("Stay close, {target}.", "How are you holding up, {target}?", "We can work this out, {target}.", "I have your back, {target}."),
+            "jax": ("Hey, {target}.", "Try to keep up, {target}.", "This might finally be entertaining, {target}.", "Good news, {target}: I have an idea."),
+            "gangle": ("Um, {target}?", "I have an idea, {target}.", "Maybe this could work, {target}.", "Can I show you something, {target}?"),
+            "kinger": ("{target}! I remembered something!", "The pattern is back, {target}.", "Listen carefully, {target}.", "This is almost familiar, {target}."),
+            "zooble": ("{target}, I am only saying this once.", "Let's be direct, {target}.", "I have a practical suggestion, {target}.", "Before Caine complicates this, {target}."),
+        }
+        observations = (
+            "We should verify {topic} before choosing a route.",
+            "The safest useful move is to compare what we know about {topic}.",
+            "Something in this place keeps pointing back to {topic}.",
+            "Let's split the problem into one step: {topic}.",
+            "I do not think Caine explained everything about {topic}.",
+            "We should decide who handles the risky part of {topic}.",
+            "There may be a shortcut, but first we need to understand {topic}.",
+            "Our last attempt changes how I see {topic}.",
+        )
+        dominant = max(
+            character.emotions.__dataclass_fields__,
+            key=lambda name: getattr(character.emotions, name),
+        )
+        closers = {
+            "fear": ("I really do not want us getting separated.", "Keep the portal in sight.", "Tell me if the world changes again."),
+            "anxiety": ("One careful step at a time.", "Let's leave ourselves a way back.", "I would rather have an actual plan."),
+            "anger": ("I am done letting the rules push us around.", "This time we push back.", "I want a straight answer."),
+            "happiness": ("This might actually work.", "We are doing better than I expected.", "At least we are making progress."),
+            "curiosity": ("I want to see what happens next.", "There is definitely more to discover.", "The details do not quite match."),
+            "excitement": ("Let's move before the opportunity disappears.", "This is the interesting part.", "I am ready to try it."),
+            "loneliness": ("Just do not leave me behind.", "It is easier if we stay together.", "I could use some company on this one."),
+        }
+        seed = perception.tick + sum(ord(letter) for letter in f"{character.id}:{target_id}:{perception.location_id}")
+        voice_options = openers.get(character.id, ("Can we talk, {target}?",))
+        opener = voice_options[seed % len(voice_options)].format(target=target_id.title())
+        short_topic = topic if len(topic) <= 115 else f"{topic[:112].rsplit(' ', 1)[0]}…"
+        observation = observations[(seed // 3) % len(observations)].format(topic=short_topic)
+        coda_options = closers[dominant]
+        coda = coda_options[(seed // 7) % len(coda_options)]
+        if perception.energy <= 3:
+            coda = "I can help, but I need a breather soon."
+        return f"{opener} {observation} {coda}"
+
+    @staticmethod
+    def _deception_line(character: Character, perception: Perception) -> str:
+        if perception.active_adventures:
+            title = perception.active_adventures[0]["title"]
+            return f"Caine told me the safest route through {title}; it definitely goes the other way."
+        visible = next(iter(perception.visible_objects.values()), None)
+        if visible:
+            return f"That thing over there is completely useless. I already checked."
+        return f"Nothing unusual happened in {perception.location_name}. Trust me."
 
     def _record_inspection(self, perception: Perception, action: Action) -> None:
         if action.kind is ActionKind.INSPECT and action.target_id:
@@ -390,4 +478,6 @@ class CharacterAgent:
             "energy": perception.energy,
             "hunger": perception.hunger,
             "active_adventures": [dict(item) for item in perception.active_adventures],
+            "is_pocket_world": perception.is_pocket_world,
+            "homeward_exit_id": perception.homeward_exit_id,
         }

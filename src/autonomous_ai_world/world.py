@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from autonomous_ai_world.events import EventBus
 from autonomous_ai_world.models import (
@@ -23,6 +23,7 @@ from autonomous_ai_world.models import (
     Weather,
     WorldObject,
     WorldTime,
+    QuestObjective,
 )
 
 
@@ -143,6 +144,12 @@ class World:
                 "title": adventure.title,
                 "premise": adventure.premise,
                 "stakes": adventure.stakes,
+                "quest_objective": adventure.quest_objective,
+                "generated_world": "yes" if adventure.generated_location_ids else "no",
+                "objective_target_id": next(
+                    (objective.target_id for objective in adventure.objectives if objective.status == "pending"),
+                    "",
+                ),
                 "phase": adventure.phase.value,
                 "origin_location_id": adventure.origin_location_id,
                 "hidden_location_id": (
@@ -155,10 +162,41 @@ class World:
                     }
                     else "unknown"
                 ),
+                "next_location_id": (
+                    self._next_step(character.location_id, adventure.origin_location_id)
+                    if adventure.phase in {AdventurePhase.HOOK, AdventurePhase.INVESTIGATION}
+                    else self._next_step(character.location_id, adventure.hidden_location_id)
+                    if adventure.phase is AdventurePhase.DISCOVERY
+                    else self._next_step(
+                        character.location_id,
+                        adventure.generated_location_ids[-1]
+                        if adventure.generated_location_ids
+                        else adventure.hidden_location_id,
+                    )
+                    if adventure.phase is AdventurePhase.ESCALATION
+                    else ""
+                ) or "",
             }
             for adventure in self.adventures.values()
             if adventure.status is AdventureStatus.ACTIVE
             and f"adventure:{adventure.id}" in character.knowledge
+        )
+        pocket_ids = {
+            location_id
+            for adventure in self.adventures.values()
+            for location_id in adventure.generated_location_ids
+        }
+        active_pocket_ids = {
+            location_id
+            for adventure in self.adventures.values()
+            if adventure.status is AdventureStatus.ACTIVE
+            for location_id in adventure.generated_location_ids
+        }
+        is_pocket_world = character.location_id in pocket_ids
+        homeward_exit_id = (
+            self._next_exit_toward_hub(character.location_id, pocket_ids)
+            if is_pocket_world and character.location_id not in active_pocket_ids
+            else None
         )
         return Perception(
             tick=self.tick,
@@ -192,9 +230,44 @@ class World:
                 if object_id in self.objects
             },
             active_adventures=known_adventures,
+            is_pocket_world=is_pocket_world,
+            homeward_exit_id=homeward_exit_id,
         )
 
-    def start_adventure(self, adventure: Adventure) -> Event:
+    def _next_exit_toward_hub(self, start_id: str, pocket_ids: set[str]) -> str | None:
+        queue: list[tuple[str, str | None]] = [(start_id, None)]
+        visited = {start_id}
+        for location_id, first_step in queue:
+            if location_id not in pocket_ids:
+                return first_step
+            for neighbor in sorted(self.locations[location_id].exits):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append((neighbor, first_step or neighbor))
+        return None
+
+    def _next_step(self, start_id: str, destination_id: str) -> str | None:
+        if start_id == destination_id:
+            return None
+        queue: list[tuple[str, str | None]] = [(start_id, None)]
+        visited = {start_id}
+        for location_id, first_step in queue:
+            for neighbor in sorted(self.locations[location_id].exits):
+                if neighbor in visited:
+                    continue
+                step = first_step or neighbor
+                if neighbor == destination_id:
+                    return step
+                visited.add(neighbor)
+                queue.append((neighbor, step))
+        return None
+
+    def start_adventure(
+        self,
+        adventure: Adventure,
+        *,
+        pocket_zones: tuple[Mapping[str, object], ...] = (),
+    ) -> Event:
         """Atomically seed a validated premise; no character action is selected."""
         if adventure.id in self.adventures:
             raise ValueError(f"adventure '{adventure.id}' already exists")
@@ -202,7 +275,32 @@ class World:
             raise ValueError("only one prototype adventure may be active")
         if adventure.origin_location_id not in self.locations:
             raise ValueError("adventure origin does not exist")
-        if adventure.hidden_location_id not in self.locations:
+        planned_locations: list[Location] = []
+        if pocket_zones:
+            for index, zone in enumerate(pocket_zones):
+                suffix = str(zone.get("slug", f"zone_{index + 1}"))
+                location_id = f"pocket_{adventure.id}_{suffix}"
+                if location_id in self.locations or any(item.id == location_id for item in planned_locations):
+                    raise ValueError("generated pocket-world location id already exists")
+                planned_locations.append(
+                    Location(
+                        location_id,
+                        str(zone.get("name", suffix.replace("_", " ").title())),
+                        str(zone.get("description", "A newly generated pocket-world zone.")),
+                        features={str(key): str(value) for key, value in dict(zone.get("features", {})).items()},
+                        danger=float(zone.get("danger", 0.35)),
+                    )
+                )
+            if len(planned_locations) < 3:
+                raise ValueError("a generated adventure world requires at least three zones")
+            for index, location in enumerate(planned_locations):
+                if index:
+                    location.exits.add(planned_locations[index - 1].id)
+                if index + 1 < len(planned_locations):
+                    location.exits.add(planned_locations[index + 1].id)
+            adventure.hidden_location_id = planned_locations[0].id
+            adventure.generated_location_ids = [location.id for location in planned_locations]
+        elif adventure.hidden_location_id not in self.locations:
             raise ValueError("adventure hidden location does not exist")
         if adventure.origin_location_id == adventure.hidden_location_id:
             raise ValueError("adventure locations must differ")
@@ -214,10 +312,20 @@ class World:
         if adventure.hidden_location_id in origin.exits:
             raise ValueError("adventure hidden location must initially be inaccessible")
 
+        self.locations.update({location.id: location for location in planned_locations})
+
         adventure.phase = AdventurePhase.HOOK
         adventure.status = AdventureStatus.ACTIVE
         adventure.created_tick = self.tick
+        adventure.created_day = self.time.day
         adventure.last_progress_tick = self.tick
+        if not adventure.objectives:
+            adventure.objectives = [
+                QuestObjective(f"{adventure.id}:briefing", "Inspect Caine's adventure briefing.", "inspect", adventure.hook_feature_id),
+                QuestObjective(f"{adventure.id}:key", "Discover the portal key hidden near the briefing.", "discover", adventure.clue_object_id),
+                QuestObjective(f"{adventure.id}:enter", "Enter the generated pocket world.", "travel", adventure.hidden_location_id),
+                QuestObjective(f"{adventure.id}:finale", adventure.quest_objective, "resolve", adventure.escalation_feature_id),
+            ]
         self.adventures[adventure.id] = adventure
         origin.features[adventure.hook_feature_id] = adventure.hook_description
         self.objects[adventure.clue_object_id] = WorldObject(
@@ -240,6 +348,10 @@ class World:
                 "feature_id": adventure.hook_feature_id,
                 "description": adventure.hook_description,
                 "phase": adventure.phase.value,
+                "world_theme": adventure.world_theme,
+                "quest_objective": adventure.quest_objective,
+                "generated_location_ids": list(adventure.generated_location_ids),
+                "objectives": [objective.description for objective in adventure.objectives],
             },
             location_id=adventure.origin_location_id,
             importance=0.9,
@@ -315,19 +427,31 @@ class World:
                 origin.exits.add(hidden.id)
                 hidden.exits.add(origin.id)
         elif new_phase is AdventurePhase.ESCALATION:
-            hidden = self.locations[adventure.hidden_location_id]
-            hidden.features.setdefault(
+            finale_id = adventure.generated_location_ids[-1] if adventure.generated_location_ids else adventure.hidden_location_id
+            finale = self.locations[finale_id]
+            finale.features.setdefault(
                 adventure.escalation_feature_id, adventure.escalation_description
             )
 
         adventure.phase = new_phase
         adventure.last_progress_tick = self.tick
         adventure.participants.add(actor.id)
+        objective_index = {
+            AdventurePhase.INVESTIGATION: 0,
+            AdventurePhase.DISCOVERY: 1,
+            AdventurePhase.ESCALATION: 2,
+            AdventurePhase.RESOLUTION: 3,
+        }[new_phase]
+        if objective_index < len(adventure.objectives):
+            objective = adventure.objectives[objective_index]
+            objective.status = "complete"
+            objective.completed_by = actor.id
+            objective.completed_tick = self.tick
         if new_phase is AdventurePhase.RESOLUTION:
             adventure.status = AdventureStatus.RESOLVED
             adventure.resolved_by = actor.id
             adventure.outcome = (
-                f"{actor.name} confronted the source and made the hidden location safe enough to study."
+                f"{actor.name} completed the quest: {adventure.quest_objective}"
             )
             kind = EventKind.ADVENTURE_RESOLVED
             summary = f"{adventure.title} resolves: {adventure.outcome}"
@@ -354,6 +478,7 @@ class World:
                 "phase": new_phase.value,
                 "cause_event_sequence": cause_event_sequence,
                 "target_id": adventure.escalation_feature_id if new_phase is AdventurePhase.RESOLUTION else None,
+                "objective_id": adventure.objectives[objective_index].id if objective_index < len(adventure.objectives) else None,
             },
             importance=0.85 if new_phase is not AdventurePhase.RESOLUTION else 1.0,
         )

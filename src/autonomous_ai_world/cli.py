@@ -1,4 +1,4 @@
-"""Observer-only text presentation for the complete Stage 7 backend."""
+"""Observer-only text presentation for the complete autonomous circus backend."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from autonomous_ai_world.simulation import Simulation, create_circus_simulation
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="ai-world", description="Observe the autonomous Stage 8 text world."
+        prog="ai-world", description="Observe Caine's autonomous daily adventure worlds."
     )
     parser.add_argument("--steps", type=int, default=10, help="simulation cycles (default: 10)")
     parser.add_argument("--seed", type=int, default=None, help="seed for a repeatable run")
@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(str(exc)) from exc
 
     print("=" * 58)
-    print("THE AUTONOMOUS DIGITAL CIRCUS - STAGE 9 (MOCK AI)")
+    print("THE AUTONOMOUS DIGITAL CIRCUS - DAILY QUEST WORLDS (MOCK AI)")
     print("Observer mode: characters choose their own actions.")
     print("=" * 58)
     for _ in range(args.steps):
@@ -75,7 +75,8 @@ def main(argv: list[str] | None = None) -> int:
     for adventure in simulation.world.adventures.values():
         print(
             f"Adventure: {adventure.title}; phase={adventure.phase.value}; "
-            f"status={adventure.status.value}; participants={','.join(sorted(adventure.participants)) or 'none'}"
+            f"status={adventure.status.value}; quest={adventure.quest_objective}; "
+            f"participants={','.join(sorted(adventure.participants)) or 'none'}"
         )
 
     if args.save_state:

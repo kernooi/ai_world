@@ -87,6 +87,17 @@ class AdventureStatus(str, Enum):
     EXPIRED = "expired"
 
 
+@dataclass(slots=True)
+class QuestObjective:
+    id: str
+    description: str
+    objective_type: str
+    target_id: str
+    status: str = "pending"
+    completed_by: str | None = None
+    completed_tick: int | None = None
+
+
 @dataclass(frozen=True, slots=True)
 class Personality:
     curiosity: float = 0.5
@@ -311,6 +322,11 @@ class Adventure:
     clue_description: str
     escalation_feature_id: str
     escalation_description: str
+    world_theme: str = "mystery"
+    quest_objective: str = "Investigate the world and resolve its central problem."
+    generated_location_ids: list[str] = field(default_factory=list)
+    objectives: list[QuestObjective] = field(default_factory=list)
+    created_day: int = 1
     phase: AdventurePhase = AdventurePhase.HOOK
     status: AdventureStatus = AdventureStatus.ACTIVE
     created_tick: int = 0
@@ -400,6 +416,8 @@ class Perception:
     inventory_tags: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     inventory_uses: Mapping[str, int | None] = field(default_factory=dict)
     active_adventures: tuple[Mapping[str, str], ...] = ()
+    is_pocket_world: bool = False
+    homeward_exit_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "features", MappingProxyType(dict(self.features)))

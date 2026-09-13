@@ -36,6 +36,15 @@ def event_payload(event: Event) -> dict[str, Any]:
 def world_snapshot(simulation: Simulation, *, event_limit: int = 80) -> dict[str, Any]:
     """Build the public observer view; private memories and hidden objects stay server-side."""
     world = simulation.world
+    pocket_location_meta: dict[str, dict[str, Any]] = {}
+    for world_number, adventure in enumerate(world.adventures.values(), start=1):
+        for zone_index, location_id in enumerate(adventure.generated_location_ids):
+            pocket_location_meta[location_id] = {
+                "world_theme": adventure.world_theme,
+                "pocket_world_number": world_number,
+                "zone_index": zone_index,
+                "adventure_id": adventure.id,
+            }
     characters = []
     for character in world.characters.values():
         emotions = {
@@ -115,6 +124,7 @@ def world_snapshot(simulation: Simulation, *, event_limit: int = 80) -> dict[str
                     for feature_id, description in location.features.items()
                 ],
                 "danger": location.danger,
+                **pocket_location_meta.get(location.id, {}),
             }
             for location in world.locations.values()
         ],
@@ -138,6 +148,21 @@ def world_snapshot(simulation: Simulation, *, event_limit: int = 80) -> dict[str
                 "title": adventure.title,
                 "premise": adventure.premise,
                 "stakes": adventure.stakes,
+                "world_theme": adventure.world_theme,
+                "quest_objective": adventure.quest_objective,
+                "generated_location_ids": list(adventure.generated_location_ids),
+                "objectives": [
+                    {
+                        "id": objective.id,
+                        "description": objective.description,
+                        "objective_type": objective.objective_type,
+                        "target_id": objective.target_id,
+                        "status": objective.status,
+                        "completed_by": objective.completed_by,
+                        "completed_tick": objective.completed_tick,
+                    }
+                    for objective in adventure.objectives
+                ],
                 "origin_location_id": adventure.origin_location_id,
                 "phase": adventure.phase.value,
                 "status": adventure.status.value,

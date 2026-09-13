@@ -221,7 +221,13 @@ class DirectorAgent:
                 {
                     "id": adventure.id,
                     "title": adventure.title,
+                    "world_theme": adventure.world_theme,
+                    "quest_objective": adventure.quest_objective,
                     "phase": adventure.phase.value,
+                    "objectives_complete": sum(
+                        objective.status == "complete" for objective in adventure.objectives
+                    ),
+                    "objective_count": len(adventure.objectives),
                     "participants": sorted(adventure.participants),
                     "idle_ticks": world.tick - adventure.last_progress_tick,
                 }
@@ -316,10 +322,9 @@ class DirectorAgent:
             expired = self.adventure_manager.maintain(world)
             if expired:
                 self.last_generated_event = expired
-                self.last_intervention_tick = world.tick
-                self.last_intervention_day = world.time.day
                 self.status = "adventure_expired"
-                return expired
+                # Closing yesterday's portal is housekeeping. It does not consume
+                # today's promise of a new Caine-created quest world.
         summary = self.summarize(world)
         if not self._is_due(world):
             self.status = "cooldown"

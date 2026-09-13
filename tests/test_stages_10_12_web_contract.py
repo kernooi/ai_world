@@ -9,9 +9,11 @@ WEB_ROOT = Path(__file__).parents[1] / "src" / "autonomous_ai_world" / "web"
 def test_stage_10_navigation_and_action_animation_are_present() -> None:
     script = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
 
-    assert "NAV_ROUTES" in script
-    assert "navigationRoute" in script
-    assert "beginDirectAnimation" in script
+    assert "NAV_ROUTES" not in script
+    assert "updateCharacterSteering" in script
+    assert "separationRadius" in script
+    assert "arrivalRadius" in script
+    assert "portal-depart" in script
     assert "animateAction" in script
     assert "scene.collisionsEnabled = true" in script
 
