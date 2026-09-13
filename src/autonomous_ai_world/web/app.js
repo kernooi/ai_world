@@ -17,6 +17,8 @@ const ui = {
   adventureStakes: document.getElementById("adventure-stakes"),
   pause: document.getElementById("pause"),
   speed: document.getElementById("speed"),
+  voices: document.getElementById("voices"),
+  volume: document.getElementById("volume"),
   labels: document.getElementById("location-labels"),
   speech: document.getElementById("speech-layer"),
   notice: document.getElementById("notice"),
@@ -31,9 +33,36 @@ const CHARACTER_COLORS = {
   gangle: "#e53c46", kinger: "#f3ebd4", zooble: "#69c59f",
 };
 const PHASES = ["hook", "investigation", "discovery", "escalation", "resolution"];
+const VOICE_PROFILES = {
+  pomni: { pitch: 1.35, rate: 1.08, hints: ["zira", "samantha", "female"] },
+  ragatha: { pitch: 1.12, rate: .94, hints: ["aria", "jenny", "female"] },
+  jax: { pitch: .78, rate: 1.12, hints: ["guy", "david", "male"] },
+  gangle: { pitch: 1.45, rate: .88, hints: ["zira", "female"] },
+  kinger: { pitch: .68, rate: .82, hints: ["mark", "george", "male"] },
+  zooble: { pitch: .96, rate: 1.03, hints: ["aria", "samantha"] },
+  caine: { pitch: 1.25, rate: 1.16, hints: ["david", "guy", "male"] },
+};
+const NAV_ROUTES = {
+  "main_tent>center_stage": [[0,0,-4],[0,0,-8]],
+  "main_tent>bedroom_hall": [[-6,0,2],[-12,0,5]],
+  "main_tent>dining_hall": [[6,0,2],[12,0,5]],
+  "main_tent>backstage": [[-3,0,6],[-2,0,11]],
+  "center_stage>backstage": [[-5,0,-8],[-6,0,5],[-3,0,11]],
+  "main_tent>adventure_portal": [[7,0,-4],[13,0,-8],[17,0,-11]],
+  "center_stage>adventure_portal": [[7,0,-13],[14,0,-13]],
+  "backstage>adventure_portal": [[8,0,10],[14,0,1],[18,0,-8]],
+  "bedroom_hall>adventure_portal": [[-11,0,4],[-3,0,-2],[8,0,-7],[17,0,-11]],
+  "dining_hall>adventure_portal": [[18,0,3],[19,0,-6]],
+};
 const worldView = { engine: null, scene: null, camera: null, sun: null, state: null, socket: null,
   locations: new Map(), characters: new Map(), objects: new Map(), paths: new Set(), reconnects: 0,
-  rain: null, locationIndex: 0 };
+  rain: null, locationIndex: 0, sessionId: null, lastMessageId: 0, lastSeenAt: 0 };
+const voiceState = {
+  supported: "speechSynthesis" in window && "SpeechSynthesisUtterance" in window,
+  enabled: localStorage.getItem("circus-voices") !== "off",
+  volume: Number(localStorage.getItem("circus-volume") ?? .8),
+  voices: [],
+};
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -64,6 +93,7 @@ function createWorld() {
   worldView.engine = new BABYLON.Engine(ui.canvas, true, { preserveDrawingBuffer: true, stencil: true });
   const scene = new BABYLON.Scene(worldView.engine);
   worldView.scene = scene;
+  scene.collisionsEnabled = true;
   scene.clearColor = new BABYLON.Color4(0.12, 0.055, 0.19, 1);
   scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
   scene.fogDensity = 0.005;
@@ -427,20 +457,38 @@ function createCharacter(character, index) {
   const location = worldView.locations.get(character.location_id);
   const offset = new BABYLON.Vector3(Math.cos(index*2.15)*1.65, 0, Math.sin(index*2.15)*1.65);
   root.position = (location ? location.root.position : BABYLON.Vector3.Zero()).add(offset);
-  worldView.characters.set(character.id, { root, leftArm, rightArm, leftLeg, rightLeg, color, locationId: character.location_id, movingUntil: 0, offset });
+  root.getChildMeshes().forEach(mesh => { mesh.checkCollisions = true; });
+  worldView.characters.set(character.id, { root, leftArm, rightArm, leftLeg, rightLeg, color, locationId: character.location_id, movingUntil: 0, talkingUntil: 0, offset, movement: null });
+}
+
+function navigationRoute(fromId, toId, view) {
+  const destination = worldView.locations.get(toId).root.position.add(view.offset);
+  const directKey = `${fromId}>${toId}`;
+  const reverseKey = `${toId}>${fromId}`;
+  let points = NAV_ROUTES[directKey];
+  if (!points && NAV_ROUTES[reverseKey]) points = NAV_ROUTES[reverseKey].slice().reverse();
+  const lane = view.offset.scale(.28);
+  const waypoints = (points || []).map(point => BABYLON.Vector3.FromArray(point).add(lane));
+  return [view.root.position.clone(), ...waypoints, destination];
 }
 
 function moveCharacter(view, locationId) {
   const location = worldView.locations.get(locationId);
   if (!location) return;
-  const destination = location.root.position.add(view.offset);
-  const distance = BABYLON.Vector3.Distance(view.root.position, destination);
+  const route = navigationRoute(view.locationId, locationId, view);
+  const distance = route.slice(1).reduce((total, point, index) => total + BABYLON.Vector3.Distance(route[index], point), 0);
   if (distance < .2) return;
-  view.root.lookAt(destination);
+  view.root.lookAt(route[1]);
   view.root.rotation.x = 0; view.root.rotation.z = 0;
-  const frames = Math.max(24, Math.min(90, distance * 2.5));
+  const frames = Math.max(30, Math.min(180, distance * 3.2));
   const ease = new BABYLON.CubicEase(); ease.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
-  BABYLON.Animation.CreateAndStartAnimation("walk", view.root, "position", 30, frames, view.root.position.clone(), destination, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
+  const animation = new BABYLON.Animation("nav-route", "position", 30, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+  animation.setEasingFunction(ease);
+  animation.setKeys(route.map((point, index) => ({ frame: Math.round(frames * index / (route.length - 1)), value: point })));
+  if (view.movement) worldView.scene.stopAnimation(view.root);
+  view.movement = worldView.scene.beginDirectAnimation(view.root, [animation], 0, frames, false, 1, () => {
+    view.root.position.y = 0; view.movement = null;
+  });
   view.movingUntil = performance.now() + frames / 30 * 1000;
   view.locationId = locationId;
 }
@@ -500,10 +548,11 @@ function animateWorld() {
   }
   for (const view of worldView.characters.values()) {
     const walking = now < view.movingUntil;
-    const swing = walking ? Math.sin(now * .012) * .55 : Math.sin(now * .002) * .04;
+    const talking = now < view.talkingUntil;
+    const swing = walking ? Math.sin(now * .012) * .55 : talking ? Math.sin(now * .018) * .28 : Math.sin(now * .002) * .04;
     view.leftArm.rotation.x = swing; view.rightArm.rotation.x = -swing;
     view.leftLeg.rotation.x = -swing; view.rightLeg.rotation.x = swing;
-    if (!walking) view.root.position.y = Math.sin(now * .0015 + view.root.uniqueId) * .035;
+    if (!walking) view.root.position.y = Math.sin(now * (talking ? .007 : .0015) + view.root.uniqueId) * (talking ? .08 : .035);
   }
   for (const object of worldView.objects.values()) object.mesh.rotation.y += .008;
   positionOverlays();
@@ -522,8 +571,9 @@ function positionOverlays() {
   }
   for (const bubble of ui.speech.children) {
     const view = worldView.characters.get(bubble.dataset.actor);
-    if (!view) continue;
-    const point = screenPoint(view.root.position.add(new BABYLON.Vector3(0,4.7,0)));
+    const speaker = view?.root || (bubble.dataset.actor === "caine" ? worldView.caine : null);
+    if (!speaker) continue;
+    const point = screenPoint(speaker.position.add(new BABYLON.Vector3(0, view ? 4.7 : 5.8, 0)));
     bubble.style.left = `${point.x}px`; bubble.style.top = `${point.y}px`;
   }
 }
@@ -580,15 +630,79 @@ function addEvents(events, replace = false) {
 
 function animateEvents(events) {
   for (const event of events) {
-    if ((event.kind === "spoke" || event.kind === "lied") && event.actor_id) showSpeech(event.actor_id, event.data.message || event.summary);
+    if ((event.kind === "spoke" || event.kind === "lied") && event.actor_id) {
+      const words = event.data.message || event.summary;
+      showSpeech(event.actor_id, words); speak(event.actor_id, words);
+    }
+    if (!event.actor_id && ["adventure_started", "situation_created", "weather_changed", "environment_changed"].includes(event.kind)) {
+      showSpeech("caine", event.summary); speak("caine", event.summary);
+    }
     if (event.kind.includes("adventure") && event.location_id) pulseLocation(event.location_id);
-    if (["searched", "inspected", "explored", "object_discovered"].includes(event.kind) && event.actor_id) pulseCharacter(event.actor_id);
+    if (event.actor_id) animateAction(event);
+  }
+}
+
+function animateAction(event) {
+  const view = worldView.characters.get(event.actor_id); if (!view || event.kind === "moved") return;
+  if (["spoke", "lied", "helped"].includes(event.kind)) {
+    const arm = event.kind === "helped" ? view.leftArm : view.rightArm;
+    BABYLON.Animation.CreateAndStartAnimation("gesture", arm, "rotation.z", 30, 24, 0, event.kind === "lied" ? -1.2 : 1.1, BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
+  } else if (["searched", "inspected", "explored", "object_discovered"].includes(event.kind)) {
+    BABYLON.Animation.CreateAndStartAnimation("look-around", view.root, "rotation.y", 30, 36, view.root.rotation.y-.5, view.root.rotation.y+.5, BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
+    pulseCharacter(event.actor_id);
+  } else if (["item_picked_up", "item_dropped", "item_used"].includes(event.kind)) {
+    BABYLON.Animation.CreateAndStartAnimation("reach", view.root, "scaling.y", 30, 18, 1, .72, BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
+  } else if (["rested", "slept"].includes(event.kind)) {
+    BABYLON.Animation.CreateAndStartAnimation("rest", view.root, "rotation.z", 30, 28, 0, event.kind === "slept" ? .7 : .25, BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
+  } else {
+    pulseCharacter(event.actor_id);
   }
 }
 
 function showSpeech(actorId, message) {
-  const bubble = node("div", "speech", message); bubble.dataset.actor = actorId; ui.speech.appendChild(bubble);
-  window.setTimeout(() => bubble.remove(), 4600);
+  const duration = Math.max(3200, Math.min(9000, message.length * 58));
+  const bubble = node("div", "speech", message); bubble.dataset.actor = actorId;
+  bubble.style.animationDuration = `${duration}ms`; ui.speech.appendChild(bubble);
+  window.setTimeout(() => bubble.remove(), duration + 100);
+}
+
+function refreshVoices() {
+  if (!voiceState.supported) return;
+  voiceState.voices = window.speechSynthesis.getVoices().filter(voice => voice.lang.toLowerCase().startsWith("en"));
+}
+
+function chooseVoice(profile) {
+  for (const hint of profile.hints) {
+    const match = voiceState.voices.find(voice => voice.name.toLowerCase().includes(hint));
+    if (match) return match;
+  }
+  return voiceState.voices[0] || null;
+}
+
+function speak(actorId, text) {
+  if (!voiceState.supported || !voiceState.enabled || !text) return;
+  const profile = VOICE_PROFILES[actorId] || { pitch: 1, rate: 1, hints: [] };
+  const character = worldView.state?.characters.find(item => item.id === actorId);
+  const emotion = character?.dominant_emotion;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.pitch = Math.max(.35, Math.min(1.8, profile.pitch + (emotion === "fear" ? .12 : emotion === "anger" ? -.1 : emotion === "excitement" ? .08 : 0)));
+  utterance.rate = Math.max(.55, Math.min(1.6, profile.rate + (emotion === "anxiety" ? .12 : emotion === "happiness" ? .06 : emotion === "fear" ? -.08 : 0)));
+  utterance.volume = voiceState.volume;
+  const selected = chooseVoice(profile); if (selected) utterance.voice = selected;
+  utterance.onstart = () => {
+    const view = worldView.characters.get(actorId);
+    if (view) view.talkingUntil = performance.now() + Math.max(1200, text.length * 55 / utterance.rate);
+  };
+  utterance.onend = utterance.onerror = () => {
+    const view = worldView.characters.get(actorId); if (view) view.talkingUntil = 0;
+  };
+  window.speechSynthesis.speak(utterance);
+}
+
+function renderVoiceControls() {
+  ui.voices.textContent = voiceState.supported ? (voiceState.enabled ? "Voices on" : "Voices off") : "Voices unavailable";
+  ui.voices.disabled = !voiceState.supported;
+  ui.volume.value = String(voiceState.volume);
 }
 
 function pulseLocation(locationId) {
@@ -627,13 +741,27 @@ function sendControl(control, value) {
 function connect() {
   setConnection("connecting", "Connecting");
   const protocol = location.protocol === "https:" ? "wss" : "ws";
-  const socket = new WebSocket(`${protocol}://${location.host}/ws`); worldView.socket = socket;
-  socket.addEventListener("open", () => { worldView.reconnects = 0; setConnection("live", "Live"); });
+  const resume = worldView.state && worldView.sessionId
+    ? `?session_id=${encodeURIComponent(worldView.sessionId)}&since=${worldView.lastMessageId}` : "";
+  const socket = new WebSocket(`${protocol}://${location.host}/ws${resume}`); worldView.socket = socket;
+  socket.addEventListener("open", () => { worldView.reconnects = 0; worldView.lastSeenAt = Date.now(); setConnection("live", "Live · synced"); });
   socket.addEventListener("message", event => {
     const message = JSON.parse(event.data);
+    worldView.lastSeenAt = Date.now();
+    if (message.protocol_version !== 1) { showNotice("The server uses an unsupported sync protocol."); socket.close(); return; }
+    if (worldView.sessionId && message.session_id !== worldView.sessionId) {
+      worldView.lastMessageId = 0;
+      worldView.state = null;
+    }
+    worldView.sessionId = message.session_id;
+    if (message.message_id <= worldView.lastMessageId) return;
+    worldView.lastMessageId = message.message_id;
+    socket.send(JSON.stringify({ type: "protocol_ack", message_id: message.message_id }));
     if (message.type === "snapshot") { applyState(message.state); addEvents(message.state.events || [], true); }
     else if (message.type === "tick") { applyState(message.state); addEvents(message.events || []); animateEvents(message.events || []); }
     else if (message.type === "control_state") { ui.pause.textContent = message.paused ? "Resume" : "Pause"; ui.speed.value = String(message.speed); }
+    else if (message.type === "resumed") setConnection("live", message.replayed ? `Live · replayed ${message.replayed}` : "Live · synced");
+    else if (message.type === "heartbeat") setConnection("live", "Live · synced");
     else if (message.type === "error") showNotice(message.message);
   });
   socket.addEventListener("close", () => {
@@ -645,5 +773,25 @@ function connect() {
 
 ui.pause.addEventListener("click", () => sendControl("paused", ui.pause.textContent === "Pause"));
 ui.speed.addEventListener("change", () => sendControl("speed", Number(ui.speed.value)));
+ui.voices.addEventListener("click", () => {
+  voiceState.enabled = !voiceState.enabled;
+  localStorage.setItem("circus-voices", voiceState.enabled ? "on" : "off");
+  if (!voiceState.enabled && voiceState.supported) window.speechSynthesis.cancel();
+  renderVoiceControls();
+});
+ui.volume.addEventListener("input", () => {
+  voiceState.volume = Number(ui.volume.value); localStorage.setItem("circus-volume", String(voiceState.volume));
+});
+refreshVoices();
+if (voiceState.supported) window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
+window.addEventListener("pointerdown", () => {
+  if (voiceState.supported && voiceState.enabled) window.speechSynthesis.resume();
+}, { once: true });
+renderVoiceControls();
+window.setInterval(() => {
+  if (worldView.socket?.readyState === WebSocket.OPEN && Date.now() - worldView.lastSeenAt > 15000) {
+    worldView.socket.close();
+  }
+}, 5000);
 createWorld();
 if (worldView.scene) connect();

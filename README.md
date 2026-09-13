@@ -1,7 +1,7 @@
 # Autonomous AI World
 
 A runnable, observer-only simulation implementing the project through
-**Stage 9 - Browser 3D World**. Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
+**Stage 12 - Voice**. Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
 independently perceive a detailed digital circus,
 reason from private state through a deterministic mock AI provider, submit
 structured tool actions, experience authoritative consequences, remember events,
@@ -138,6 +138,33 @@ python -m pytest
 This is a fan-built procedural interpretation. The repository includes no extracted
 models, textures, audio, scripts, or other production assets from the show.
 
+### Stage 10 - Navigation and character bodies
+
+- Multi-waypoint routes keep travel on clear lanes through the furnished circus
+- Reverse-route planning and per-character lane offsets avoid visual overlap
+- Scene collision metadata protects the boundary between characters and solid props
+- Separate walking, talking, helping, searching, inspecting, collecting, resting,
+  and sleeping body animations
+- Six bespoke procedural body rigs with independently animated limbs
+
+### Stage 11 - Real-time synchronization
+
+- Versioned envelopes with session IDs, monotonic message IDs, and UTC server times
+- Client acknowledgements, duplicate suppression, and ordered event application
+- A 256-message replay buffer for short disconnects
+- Full observer-safe snapshot fallback when replay history is unavailable
+- Five-second heartbeat and automatic stale-connection recovery
+- `GET /api/protocol` exposes the supported observer-only protocol contract
+
+### Stage 12 - Voice
+
+- Browser-native speech synthesis with no API key or cloud TTS account
+- Distinct pitch, rate, and installed-voice preferences for all six characters and Caine
+- Emotion-sensitive pitch and timing adjustments
+- Ordered dialogue playback synchronized with speech bubbles and body movement
+- Persistent voice on/off and volume controls
+- Caine voices daily adventures and circus-wide announcements
+
 ## Architecture
 
 ```text
@@ -192,4 +219,5 @@ silently making network calls.
 - `web/` - procedural Babylon.js scene and observer dashboard
 
 See [docs/STAGE_9_WEB_ARCHITECTURE.md](docs/STAGE_9_WEB_ARCHITECTURE.md) for the
-browser boundary, message protocol, and operational behavior.
+browser boundary and [docs/STAGES_10_12_ARCHITECTURE.md](docs/STAGES_10_12_ARCHITECTURE.md)
+for navigation, resilient synchronization, and voice behavior.

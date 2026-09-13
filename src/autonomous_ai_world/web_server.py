@@ -1,4 +1,4 @@
-"""FastAPI host and autonomous simulation loop for the Stage 9 web world."""
+"""FastAPI host, resilient synchronization, and simulation loop through Stage 12."""
 
 from __future__ import annotations
 
@@ -7,9 +7,12 @@ import asyncio
 import contextlib
 import shutil
 import threading
+import uuid
 import webbrowser
+from collections import deque
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +26,8 @@ from autonomous_ai_world.persistence import JsonStateRepository, PersistenceErro
 from autonomous_ai_world.simulation import Simulation, create_circus_simulation
 from autonomous_ai_world.web_protocol import event_payload, world_snapshot
 
+PROTOCOL_VERSION = 1
+
 
 @dataclass(frozen=True, slots=True)
 class WebRuntimeConfig:
@@ -35,24 +40,80 @@ class WebRuntimeConfig:
 
 class ConnectionManager:
     def __init__(self) -> None:
-        self.connections: set[WebSocket] = set()
+        self.connections: dict[WebSocket, int] = {}
+        self.session_id = uuid.uuid4().hex
+        self.message_id = 0
+        self.replay: deque[dict[str, Any]] = deque(maxlen=256)
+        self._heartbeat_task: asyncio.Task[None] | None = None
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
-        self.connections.add(websocket)
+        self.connections[websocket] = 0
 
     def disconnect(self, websocket: WebSocket) -> None:
-        self.connections.discard(websocket)
+        self.connections.pop(websocket, None)
 
-    async def broadcast(self, message: dict[str, Any]) -> None:
+    def acknowledge(self, websocket: WebSocket, message_id: Any) -> bool:
+        if not isinstance(message_id, int) or isinstance(message_id, bool) or message_id < 0:
+            return False
+        if websocket not in self.connections:
+            return False
+        self.connections[websocket] = max(self.connections[websocket], message_id)
+        return True
+
+    def _envelope(self, message: dict[str, Any]) -> dict[str, Any]:
+        self.message_id += 1
+        return {
+            **message,
+            "protocol_version": PROTOCOL_VERSION,
+            "session_id": self.session_id,
+            "message_id": self.message_id,
+            "server_time": datetime.now(UTC).isoformat(),
+        }
+
+    async def send(self, websocket: WebSocket, message: dict[str, Any]) -> dict[str, Any]:
+        envelope = self._envelope(message)
+        await websocket.send_json(envelope)
+        return envelope
+
+    async def broadcast(
+        self, message: dict[str, Any], *, replayable: bool = True
+    ) -> dict[str, Any]:
+        envelope = self._envelope(message)
+        if replayable:
+            self.replay.append(envelope)
         stale: list[WebSocket] = []
         for connection in tuple(self.connections):
             try:
-                await connection.send_json(message)
+                await connection.send_json(envelope)
             except Exception:
                 stale.append(connection)
         for connection in stale:
             self.disconnect(connection)
+        return envelope
+
+    def replay_since(self, session_id: str | None, message_id: int | None) -> list[dict[str, Any]] | None:
+        if session_id != self.session_id or message_id is None or message_id < 0:
+            return None
+        if self.replay and message_id < self.replay[0]["message_id"] - 1:
+            return None
+        return [message for message in self.replay if message["message_id"] > message_id]
+
+    async def start_heartbeat(self) -> None:
+        if self._heartbeat_task is None:
+            self._heartbeat_task = asyncio.create_task(self._heartbeat(), name="web-heartbeat")
+
+    async def stop_heartbeat(self) -> None:
+        task, self._heartbeat_task = self._heartbeat_task, None
+        if task:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    async def _heartbeat(self) -> None:
+        while True:
+            await asyncio.sleep(5)
+            await self.broadcast({"type": "heartbeat"}, replayable=False)
 
 
 class SimulationRunner:
@@ -106,8 +167,7 @@ class SimulationRunner:
             "events": [event_payload(event) for event in events],
             "state": snapshot,
         }
-        await self.connections.broadcast(message)
-        return message
+        return await self.connections.broadcast(message)
 
     async def apply_control(self, control: str, value: Any) -> str | None:
         if control == "paused" and isinstance(value, bool):
@@ -121,7 +181,7 @@ class SimulationRunner:
             self.speed = float(value)
         else:
             return "Only observer playback controls are allowed: paused or speed (0.5, 1, 2, 4)."
-        await self.connections.broadcast(self.control_state)
+        await self.connections.broadcast(self.control_state, replayable=False)
         return None
 
     async def _run(self) -> None:
@@ -162,14 +222,16 @@ def create_app(config: WebRuntimeConfig | None = None) -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        await connections.start_heartbeat()
         if config.auto_run:
             await runner.start()
         try:
             yield
         finally:
             await runner.stop()
+            await connections.stop_heartbeat()
 
-    app = FastAPI(title="The Autonomous Digital Circus", version="0.9.0", lifespan=lifespan)
+    app = FastAPI(title="The Autonomous Digital Circus", version="0.12.0", lifespan=lifespan)
     app.state.runner = runner
 
     @app.get("/api/health")
@@ -180,6 +242,19 @@ def create_app(config: WebRuntimeConfig | None = None) -> FastAPI:
             "clients": len(connections.connections),
             "paused": runner.paused,
             "speed": runner.speed,
+            "protocol_version": PROTOCOL_VERSION,
+            "session_id": connections.session_id,
+            "message_id": connections.message_id,
+        }
+
+    @app.get("/api/protocol")
+    async def protocol() -> dict[str, Any]:
+        return {
+            "protocol_version": PROTOCOL_VERSION,
+            "session_id": connections.session_id,
+            "resume_buffer": connections.replay.maxlen,
+            "inbound_types": ["observer_control", "protocol_ack"],
+            "observer_only": True,
         }
 
     @app.get("/api/snapshot")
@@ -190,18 +265,39 @@ def create_app(config: WebRuntimeConfig | None = None) -> FastAPI:
     async def observer_socket(websocket: WebSocket) -> None:
         await connections.connect(websocket)
         try:
-            await websocket.send_json({"type": "snapshot", "state": await runner.snapshot()})
-            await websocket.send_json(runner.control_state)
+            session_id = websocket.query_params.get("session_id")
+            try:
+                since = int(websocket.query_params["since"]) if "since" in websocket.query_params else None
+            except ValueError:
+                since = None
+            replay = connections.replay_since(session_id, since)
+            if replay is None:
+                await connections.send(
+                    websocket, {"type": "snapshot", "state": await runner.snapshot()}
+                )
+            else:
+                for replayed in replay:
+                    await websocket.send_json(replayed)
+                await connections.send(
+                    websocket, {"type": "resumed", "replayed": len(replay)}
+                )
+            await connections.send(websocket, runner.control_state)
             while True:
                 message = await websocket.receive_json()
+                if message.get("type") == "protocol_ack":
+                    if not connections.acknowledge(websocket, message.get("message_id")):
+                        await connections.send(
+                            websocket, {"type": "error", "message": "Invalid acknowledgement."}
+                        )
+                    continue
                 if message.get("type") != "observer_control":
-                    await websocket.send_json(
-                        {"type": "error", "message": "The browser is observer-only."}
+                    await connections.send(
+                        websocket, {"type": "error", "message": "The browser is observer-only."}
                     )
                     continue
                 error = await runner.apply_control(message.get("control", ""), message.get("value"))
                 if error:
-                    await websocket.send_json({"type": "error", "message": error})
+                    await connections.send(websocket, {"type": "error", "message": error})
         except WebSocketDisconnect:
             pass
         finally:

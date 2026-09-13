@@ -57,6 +57,11 @@
         <h2>Live events</h2>
       </div>
       <div class="playback">
+        <button id="voices" type="button" title="Turn character voices on or off">Voices on</button>
+        <label class="volume-control" title="Voice volume">
+          <span class="sr-only">Voice volume</span>
+          <input id="volume" type="range" min="0" max="1" step="0.1" value="0.8" aria-label="Voice volume">
+        </label>
         <button id="pause" type="button" title="Pause or resume the simulation">Pause</button>
         <label>
           <span class="sr-only">Playback speed</span>

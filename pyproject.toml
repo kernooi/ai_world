@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autonomous-ai-world"
-version = "0.9.0"
-description = "An autonomous six-character digital circus with a procedural browser-native 3D world"
+version = "0.12.0"
+description = "An autonomous voiced digital circus with procedural 3D navigation and resilient live sync"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Autonomous AI World contributors" }]

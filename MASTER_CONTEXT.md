@@ -1594,14 +1594,18 @@ collision
 basic animation
 ```
 
+The browser uses reversible waypoint routes around rings and props, stable per-character
+lane offsets, collision-enabled meshes, independently animated limbs, and distinct
+motions for conversation, helping, searching, objects, rest, and sleep.
+
 Example:
 
 ```text
 AI:
-move_to(cave)
+move_to(adventure_portal)
 
 Browser:
-character walks to cave
+character follows a clear multi-point route to the portal
 ```
 
 ---
@@ -1623,6 +1627,10 @@ world state
 
 Make communication asynchronous.
 
+Use versioned envelopes, session and message IDs, acknowledgements, duplicate suppression,
+a bounded replay buffer, heartbeat monitoring, and full-snapshot fallback. Reconnects must
+never invent, reorder, or silently lose authoritative events.
+
 ---
 
 ## STAGE 12 — Voice
@@ -1636,6 +1644,11 @@ emotion
 speech timing
 dialogue playback
 ```
+
+Use browser-native speech synthesis for the mock-AI phase. Give every character and Caine
+a distinct voice profile, modify pitch and timing from public emotion state, synchronize
+captions and body motion to speech, and provide persistent volume/mute controls. Do not
+require a cloud TTS account or voice-cloning asset.
 
 ---
 
