@@ -65,10 +65,10 @@ def test_caine_schedule_and_cast_survive_persistence() -> None:
 def test_circus_snapshot_identifies_caine_without_leaking_hidden_key() -> None:
     snapshot = world_snapshot(create_circus_simulation(seed=3))
 
-    assert snapshot["director"] == {
-        "name": "Caine",
-        "status": "waiting",
-        "once_per_day": True,
-        "last_event_day": None,
-    }
+    assert snapshot["director"]["name"] == "Caine"
+    assert snapshot["director"]["status"] == "waiting"
+    assert snapshot["director"]["once_per_day"] is True
+    assert snapshot["director"]["last_event_day"] is None
+    assert snapshot["director"]["advanced"] is True
+    assert snapshot["director"]["pacing"]["arc_stage"] == "setup"
     assert "exit_key" not in {item["id"] for item in snapshot["objects"]}

@@ -92,6 +92,9 @@ def debug_snapshot(simulation: Simulation) -> dict[str, Any]:
         },
         "characters": characters,
         "director": {
+            "name": simulation.director.name,
+            "advanced": simulation.director.advanced,
+            "pacing": simulation.director.pacing.to_dict(),
             "status": simulation.director.status,
             "cooldown_remaining": simulation.director.cooldown_remaining,
             "last_error": simulation.director.last_error,

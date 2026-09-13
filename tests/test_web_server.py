@@ -5,7 +5,7 @@ import asyncio
 from fastapi.testclient import TestClient
 
 from autonomous_ai_world.persistence import JsonStateRepository
-from autonomous_ai_world.simulation import create_default_simulation
+from autonomous_ai_world.simulation import create_circus_simulation, create_default_simulation
 from autonomous_ai_world.web_server import WebRuntimeConfig, create_app
 
 
@@ -116,3 +116,23 @@ def test_browser_replaces_a_pre_circus_save_with_the_new_scenario(tmp_path) -> N
         "pomni", "ragatha", "jax", "gangle", "kinger", "zooble"
     }
     assert (tmp_path / "old-world.pre-circus.json").exists()
+
+
+def test_browser_upgrades_an_older_circus_save_without_losing_progress(tmp_path) -> None:
+    path = tmp_path / "circus.json"
+    old = create_circus_simulation(seed=5)
+    old.run(2)
+    old.world.locations.pop("mirror_maze")
+    old.world.locations.pop("moon_carnival")
+    old.world.locations.pop("candy_kingdom")
+    old.director.advanced = False
+    old.save(JsonStateRepository(path))
+
+    app = create_app(WebRuntimeConfig(seed=5, state_path=path, auto_run=False))
+    restored = app.state.runner.simulation
+
+    assert restored.world.tick == 2
+    assert restored.director.advanced is True
+    assert {"mirror_maze", "moon_carnival", "candy_kingdom"} <= set(
+        restored.world.locations
+    )

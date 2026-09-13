@@ -1,12 +1,11 @@
 # Autonomous AI World
 
 A runnable, observer-only simulation implementing the project through
-**Stage 12 - Voice**. Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
+**Stage 20 - Episode System**. Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
 independently perceive a detailed digital circus,
 reason from private state through a deterministic mock AI provider, submit
 structured tool actions, experience authoritative consequences, remember events,
 and develop directional relationships. Caine acts as the Director and introduces
-validated circumstances and multi-step premises without choosing character behavior.
 one validated challenge per world day without choosing character behavior. The live
 state is presented as a procedural 3D world in a normal web browser.
 
@@ -165,19 +164,84 @@ models, textures, audio, scripts, or other production assets from the show.
 - Persistent voice on/off and volume controls
 - Caine voices daily adventures and circus-wide announcements
 
+### Stage 13 - Facial animation and expressiveness
+
+- Emotion-driven eye size, blinking, eyebrow angle, mouth shape, and head tilt
+- Fear, anxiety, anger, happiness, curiosity, and loneliness produce different poses
+- Emotion-aware resting arm posture blends with event-selected gestures
+- Speech timing animates the active speaker without changing simulation state
+
+### Stage 14 - Camera AI
+
+- Event-interest scoring selects the most important live action
+- Close, medium, wide, conversation, character-follow, location, and Caine shots
+- Smooth target/radius transitions and moving-character tracking
+- Automatic establishing shots when the world becomes visually quiet
+- Manual orbit temporarily overrides the camera AI; cinematic mode can be disabled
+
+### Stage 15 - Advanced Director
+
+- Persisted tension, arc stage, quiet-time, character focus, major-event, and expansion state
+- Adventure phase, emotion, activity, and relationship tension drive story pacing
+- Character-development opportunities tailored to each cast member
+- Three multi-stage circus adventure arcs with separate pocket worlds
+- Escalating major-event candidates and controlled expansion into the Infinite Mirror Maze
+- Every proposal still passes world validation, and Caine still cannot select character actions
+
+### Stage 16 - Persistent world
+
+- Versioned full-world saves retain history, memory, discoveries, relationships, locations,
+  objects, psychology, world systems, episodes, and major consequences
+- Atomic autosaves keep a last-known-good backup and recover from a damaged primary save
+- Older circus saves migrate forward and receive the expanded psychology profiles
+
+### Stage 17 - Advanced world simulation
+
+- Circus-specific stability, audience excitement, cast cohesion, prop condition, and supplies
+- Deterministic show phases, Gloink population cycles, and faction influence
+- Adventures construct persistent set pieces; crises damage them; character behavior changes
+  shared social and environmental conditions
+- Low stability, high audience pressure, and low cohesion feed back into character emotions
+  and therefore later autonomous choices
+- The observer scene renders the live NPC population and responds to system pressure
+
+### Stage 18 - Advanced character psychology
+
+- Persistent identity, personal history, ambition, subjective beliefs, internal conflicts,
+  social status, reputation, behavioral habits, and private secrets
+- Habits and standing evolve from validated actions and influence later decision scores
+- Each circus character has a distinct psychological profile; secrets never enter public snapshots
+
+### Stage 19 - Production presentation
+
+- Animated show spotlights, portal motion, roaming Gloinks, confetti, and glitch transitions
+- Browser-native ambient music and event sound effects with a persistent sound control
+- Live world-system meters and public character reputation/habit cues
+- Adaptive render scaling and hidden-tab suspension preserve browser performance
+
+### Stage 20 - Episode system
+
+- Daily Director incidents dynamically open episode-level stories
+- Important characters, major event sequences, memorable moments, and outcomes accumulate
+  from authoritative events instead of a fixed script
+- Episodes close on resolution or day boundaries and persist in a durable world chronicle
+- Major consequences remain available independently of the short live event feed
+
 ## Architecture
 
 ```text
 Browser 3D observer <- WebSocket/snapshots <- FastAPI host
                                               |
-                                      authoritative World <-> atomic persistence
+                                      authoritative World <-> resilient persistence
                                               ^       |
-                            validated Actions |       +-> private state projections
+                            validated Actions |       +-> psychology / world systems
                           +-------------------+-------------------+
                           |                                       |
                   Character agents                            Director
                   independent mock AI                 premises/circumstances only
                           +----------> AdventureManager <----------+
+                                              |
+                                      Episode chronicle
 ```
 
 The mock provider selects among candidates generated from character state, goals,
@@ -209,6 +273,8 @@ silently making network calls.
 - `agents.py` - character reasoning pipeline and fallback behavior
 - `memory.py` - tiered storage and relevance retrieval
 - `relationships.py` - deterministic event-driven social projection
+- `world_systems.py` - circus cycles, resources, NPC population, and shared pressures
+- `episodes.py` - emergent episode assembly and persistent consequence chronicle
 - `director.py` - summarized observation and cooldown interventions
 - `adventures.py` - data-driven premises and event-triggered phase matching
 - `persistence.py` - replaceable in-memory and atomic JSON repositories
@@ -219,5 +285,9 @@ silently making network calls.
 - `web/` - procedural Babylon.js scene and observer dashboard
 
 See [docs/STAGE_9_WEB_ARCHITECTURE.md](docs/STAGE_9_WEB_ARCHITECTURE.md) for the
-browser boundary and [docs/STAGES_10_12_ARCHITECTURE.md](docs/STAGES_10_12_ARCHITECTURE.md)
-for navigation, resilient synchronization, and voice behavior.
+browser boundary, [docs/STAGES_10_12_ARCHITECTURE.md](docs/STAGES_10_12_ARCHITECTURE.md)
+for navigation/synchronization/voice, and
+[docs/STAGES_13_15_ARCHITECTURE.md](docs/STAGES_13_15_ARCHITECTURE.md) for expression,
+camera direction, and advanced story pacing, and
+[docs/STAGES_16_20_ARCHITECTURE.md](docs/STAGES_16_20_ARCHITECTURE.md) for persistence,
+world systems, psychology, presentation, and episodes.

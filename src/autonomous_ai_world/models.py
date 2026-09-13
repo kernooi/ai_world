@@ -160,6 +160,47 @@ class KnowledgeFact:
         object.__setattr__(self, "confidence", _unit(self.confidence))
 
 
+@dataclass(frozen=True, slots=True)
+class Belief:
+    """A subjective conviction. Unlike knowledge, a belief may be mistaken."""
+
+    id: str
+    statement: str
+    confidence: float = 0.5
+    source: str = "intuition"
+    updated_tick: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "confidence", _unit(self.confidence))
+
+
+@dataclass(slots=True)
+class CharacterPsychology:
+    """Long-lived identity and social traits that evolve through experience."""
+
+    identity: str = "A resident trying to make sense of the world."
+    personal_history: tuple[str, ...] = ()
+    long_term_ambition: str = "Find a meaningful place in the world."
+    beliefs: dict[str, Belief] = field(default_factory=dict)
+    internal_conflicts: tuple[str, ...] = ()
+    social_status: float = 0.5
+    reputation: float = 0.5
+    habits: dict[str, float] = field(default_factory=dict)
+    secrets: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        self.social_status = _unit(self.social_status)
+        self.reputation = _unit(self.reputation)
+        self.habits = {str(name): _unit(value) for name, value in self.habits.items()}
+
+    def reinforce_habit(self, action: str, amount: float = 0.04) -> None:
+        self.habits[action] = _unit(self.habits.get(action, 0.0) + amount)
+
+    def adjust_standing(self, *, status: float = 0.0, reputation: float = 0.0) -> None:
+        self.social_status = _unit(self.social_status + status)
+        self.reputation = _unit(self.reputation + reputation)
+
+
 @dataclass(slots=True)
 class Relationship:
     trust: float = 0.5
@@ -290,6 +331,7 @@ class Character:
     goals: list[Goal] = field(default_factory=list)
     fears: tuple[str, ...] = ()
     preferences: tuple[str, ...] = ()
+    psychology: CharacterPsychology = field(default_factory=CharacterPsychology)
     emotions: EmotionalState = field(default_factory=EmotionalState)
     physical_state: PhysicalState = field(default_factory=PhysicalState)
     knowledge: dict[str, KnowledgeFact] = field(default_factory=dict)

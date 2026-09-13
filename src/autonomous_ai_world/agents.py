@@ -76,6 +76,8 @@ class CharacterAgent:
     ) -> Decision:
         query = " ".join(
             [goal.description for goal in character.goals]
+            + [character.psychology.long_term_ambition]
+            + [belief.statement for belief in character.psychology.beliefs.values()]
             + [event.summary for event in perception.recent_events[-4:]]
         )
         memories = memory_store.retrieve(
@@ -146,6 +148,8 @@ class CharacterAgent:
             target: str | None = None,
             message: str | None = None,
         ) -> None:
+            # Repeated choices become habits without ever overriding safety validation.
+            score += character.psychology.habits.get(kind.value, 0.0) * 0.24
             if (
                 character.last_action
                 and character.last_action.kind is kind
@@ -238,6 +242,7 @@ class CharacterAgent:
                 + social_memory
                 - relation.anger * 0.3
                 - social_saturation
+                + character.psychology.social_status * 0.08
             )
             add(
                 ActionKind.TALK,
@@ -254,6 +259,7 @@ class CharacterAgent:
                     + p.loyalty * relation.friendship * 0.4
                     + goal_scores["protect"] * 0.55
                     + social_memory
+                    + character.psychology.reputation * 0.12
                     - social_saturation
                 )
                 add(
@@ -268,6 +274,7 @@ class CharacterAgent:
                 + p.competitiveness * 0.25
                 + relation.suspicion * 0.15
                 - relation.friendship * 0.3
+                + (1.0 - character.psychology.reputation) * 0.1
                 - social_saturation
             )
             if lie_score > 0.55:
@@ -352,6 +359,18 @@ class CharacterAgent:
                 for name in character.personality.__dataclass_fields__
             },
             "goals": [goal.description for goal in character.goals],
+            "identity": character.psychology.identity,
+            "personal_history": list(character.psychology.personal_history),
+            "long_term_ambition": character.psychology.long_term_ambition,
+            "beliefs": [
+                {"statement": belief.statement, "confidence": belief.confidence}
+                for belief in character.psychology.beliefs.values()
+            ],
+            "internal_conflicts": list(character.psychology.internal_conflicts),
+            "social_status": character.psychology.social_status,
+            "reputation": character.psychology.reputation,
+            "habits": dict(character.psychology.habits),
+            "secrets": list(character.psychology.secrets),
             "emotions": {
                 name: getattr(character.emotions, name)
                 for name in character.emotions.__dataclass_fields__

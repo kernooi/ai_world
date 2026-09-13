@@ -1,4 +1,4 @@
-"""FastAPI host, resilient synchronization, and simulation loop through Stage 12."""
+"""FastAPI host, resilient synchronization, and simulation loop through Stage 20."""
 
 from __future__ import annotations
 
@@ -196,11 +196,21 @@ class SimulationRunner:
 
 def _load_simulation(config: WebRuntimeConfig) -> tuple[Simulation, JsonStateRepository]:
     repository = JsonStateRepository(config.state_path)
-    if not config.fresh and repository.path.exists():
+    if not config.fresh and (repository.path.exists() or repository.backup_path.exists()):
         try:
             restored = Simulation.load(repository, seed=config.seed, settings=Settings.from_env())
             expected_cast = {"pomni", "ragatha", "jax", "gangle", "kinger", "zooble"}
             if set(restored.world.characters) == expected_cast:
+                current = create_circus_simulation(seed=config.seed, settings=Settings.from_env())
+                for location_id, location in current.world.locations.items():
+                    restored.world.locations.setdefault(location_id, location)
+                for character_id, character in restored.world.characters.items():
+                    if not character.psychology.beliefs:
+                        character.psychology = current.world.characters[character_id].psychology
+                restored.director.advanced = True
+                restored.director.situations = current.director.situations
+                if restored.adventures and current.adventures:
+                    restored.adventures.templates = current.adventures.templates
                 return restored, repository
             backup = repository.path.with_name(
                 f"{repository.path.stem}.pre-circus{repository.path.suffix}"
@@ -231,7 +241,7 @@ def create_app(config: WebRuntimeConfig | None = None) -> FastAPI:
             await runner.stop()
             await connections.stop_heartbeat()
 
-    app = FastAPI(title="The Autonomous Digital Circus", version="0.12.0", lifespan=lifespan)
+    app = FastAPI(title="The Autonomous Digital Circus", version="0.20.0", lifespan=lifespan)
     app.state.runner = runner
 
     @app.get("/api/health")

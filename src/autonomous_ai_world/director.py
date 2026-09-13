@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import random
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any, Mapping
 
 from autonomous_ai_world.ai import AIProvider, MockAIProvider
@@ -28,6 +28,31 @@ class SituationTemplate:
     description: str
 
 
+@dataclass(slots=True)
+class DirectorPacingState:
+    tension: float = 0.2
+    arc_stage: str = "setup"
+    quiet_ticks: int = 0
+    focus_character_id: str | None = None
+    development_opportunity: str | None = None
+    major_events: int = 0
+    world_expansions: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+    def restore(self, data: Mapping[str, Any]) -> None:
+        self.tension = max(0.0, min(1.0, float(data.get("tension", self.tension))))
+        self.arc_stage = str(data.get("arc_stage", self.arc_stage))
+        self.quiet_ticks = max(0, int(data.get("quiet_ticks", self.quiet_ticks)))
+        focus = data.get("focus_character_id")
+        self.focus_character_id = str(focus) if focus else None
+        opportunity = data.get("development_opportunity")
+        self.development_opportunity = str(opportunity) if opportunity else None
+        self.major_events = max(0, int(data.get("major_events", self.major_events)))
+        self.world_expansions = max(0, int(data.get("world_expansions", self.world_expansions)))
+
+
 @dataclass(frozen=True, slots=True)
 class WorldSummary:
     time_label: str
@@ -37,6 +62,7 @@ class WorldSummary:
     active_adventures: tuple[dict[str, object], ...]
     relationship_tension: float
     activity_score: float
+    pacing: Mapping[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -47,6 +73,7 @@ class WorldSummary:
             "active_adventures": list(self.active_adventures),
             "relationship_tension": self.relationship_tension,
             "activity_score": self.activity_score,
+            "pacing": dict(self.pacing),
         }
 
 
@@ -115,6 +142,7 @@ class DirectorAgent:
         adventure_manager: AdventureManager | None = None,
         name: str = "Director",
         once_per_day: bool = False,
+        advanced: bool = False,
     ) -> None:
         if interval < 1:
             raise ValueError("Director interval must be positive")
@@ -128,6 +156,8 @@ class DirectorAgent:
         self.adventure_manager = adventure_manager
         self.name = name
         self.once_per_day = once_per_day
+        self.advanced = advanced
+        self.pacing = DirectorPacingState()
         self._created = 0
         self.last_intervention_tick: int | None = None
         self.last_intervention_day: int | None = None
@@ -160,6 +190,10 @@ class DirectorAgent:
             for character in world.characters.values()
             for relationship in character.relationships.values()
         ]
+        relationship_tension = sum(tensions) / len(tensions) if tensions else 0.0
+        activity_score = min(1.0, len(actionable) / 8)
+        if self.advanced:
+            self._update_pacing(world, relationship_tension, activity_score)
         summary = WorldSummary(
             time_label=world.time.label,
             weather=world.weather.value,
@@ -194,11 +228,72 @@ class DirectorAgent:
                 for adventure in world.adventures.values()
                 if adventure.status.value == "active"
             ),
-            relationship_tension=(sum(tensions) / len(tensions) if tensions else 0.0),
-            activity_score=min(1.0, len(actionable) / 8),
+            relationship_tension=relationship_tension,
+            activity_score=activity_score,
+            pacing=self.pacing.to_dict() if self.advanced else {},
         )
         self.last_world_summary = summary
         return summary
+
+    def _update_pacing(
+        self, world: World, relationship_tension: float, activity_score: float
+    ) -> None:
+        active = self.adventure_manager.active if self.adventure_manager else None
+        phase_pressure = {
+            "hook": 0.3, "investigation": 0.45, "discovery": 0.6,
+            "escalation": 0.9, "resolution": 0.25,
+        }.get(active.phase.value if active else "", 0.18)
+        emotional_pressure = max(
+            (
+                character.emotions.fear * .55
+                + character.emotions.anxiety * .35
+                + character.emotions.anger * .1
+                for character in world.characters.values()
+            ),
+            default=0.0,
+        )
+        observed = min(
+            1.0,
+            phase_pressure * .42
+            + emotional_pressure * .3
+            + relationship_tension * .18
+            + activity_score * .1,
+        )
+        self.pacing.tension = round(self.pacing.tension * .62 + observed * .38, 3)
+        self.pacing.quiet_ticks = self.pacing.quiet_ticks + 1 if activity_score < .25 else 0
+        if active:
+            self.pacing.arc_stage = {
+                "hook": "setup", "investigation": "rising_action", "discovery": "revelation",
+                "escalation": "crisis", "resolution": "recovery",
+            }[active.phase.value]
+        elif self.pacing.tension > .67:
+            self.pacing.arc_stage = "crisis"
+        elif self.pacing.quiet_ticks > 3:
+            self.pacing.arc_stage = "renewal"
+        else:
+            self.pacing.arc_stage = "intermission"
+
+        focus = max(
+            world.characters.values(),
+            key=lambda character: (
+                character.emotions.anxiety
+                + character.emotions.fear
+                + character.emotions.loneliness
+                + (1 - character.emotions.happiness) * .35
+            ),
+        )
+        opportunities = {
+            "pomni": "a courage choice with a truthful escape clue",
+            "ragatha": "a chance to set a boundary while still helping someone",
+            "jax": "a consequence that rewards responsibility over mockery",
+            "gangle": "a creative problem only her perspective can solve",
+            "kinger": "a quiet mystery that rewards a moment of clarity",
+            "zooble": "a meaningful choice about identity and personal agency",
+        }
+        self.pacing.focus_character_id = focus.id
+        self.pacing.development_opportunity = opportunities.get(
+            focus.id, "a choice that tests a personal value"
+        )
 
     def _is_due(self, world: World) -> bool:
         if self.once_per_day:
@@ -296,6 +391,53 @@ class DirectorAgent:
                 score=0.7 if world.tick % (self.interval * 2) == 0 else 0.5,
             )
         )
+        if self.advanced and self.pacing.focus_character_id in world.characters:
+            focus = world.characters[self.pacing.focus_character_id]
+            candidates.append(
+                self._request_payload(
+                    DirectorEventRequest(
+                        DirectorEventKind.SITUATION,
+                        f"Caine spotlights {focus.name} for an unusually personal challenge",
+                        location_id=focus.location_id,
+                        description=str(self.pacing.development_opportunity),
+                        object_id=f"development_{focus.id}_{world.time.day}",
+                    ),
+                    score=0.74 if self.pacing.tension < 0.68 else 0.59,
+                )
+            )
+            if self.pacing.tension >= 0.58:
+                candidates.append(
+                    self._request_payload(
+                        DirectorEventRequest(
+                            DirectorEventKind.SITUATION,
+                            "Caine triggers a tent-wide RED ALERT spectacular",
+                            location_id=focus.location_id,
+                            description=(
+                                "The lights turn crimson, every exit moves, and a giant countdown asks "
+                                "the cast to cooperate before the rings exchange places."
+                            ),
+                            object_id=f"major_red_alert_{world.time.day}",
+                        ),
+                        score=0.86,
+                    )
+                )
+            expansion_id = "mirror_maze"
+            if (
+                self._created >= 2
+                and expansion_id in world.locations
+                and expansion_id not in world.locations[focus.location_id].exits
+            ):
+                candidates.append(
+                    self._request_payload(
+                        DirectorEventRequest(
+                            DirectorEventKind.OPEN_PATH,
+                            "a glittering corridor unfolds into the Infinite Mirror Maze.",
+                            location_id=focus.location_id,
+                            destination_id=expansion_id,
+                        ),
+                        score=0.82 if self._created >= 3 or self.pacing.quiet_ticks >= 2 else 0.69,
+                    )
+                )
         return candidates
 
     def _situation_request(self, world: World) -> DirectorEventRequest:
@@ -355,6 +497,11 @@ class DirectorAgent:
             self.status = "intervention_rejected"
             return None
         self._created += 1
+        if self.advanced:
+            if request.kind is DirectorEventKind.OPEN_PATH:
+                self.pacing.world_expansions += 1
+            if request.object_id and request.object_id.startswith("major_"):
+                self.pacing.major_events += 1
         self.last_intervention_tick = world.tick
         self.last_intervention_day = world.time.day
         self.last_generated_event = event

@@ -15,18 +15,26 @@ const ui = {
   adventurePremise: document.getElementById("adventure-premise"),
   adventurePhases: document.getElementById("adventure-phases"),
   adventureStakes: document.getElementById("adventure-stakes"),
+  episodeNumber: document.getElementById("episode-number"),
+  episodeTitle: document.getElementById("episode-title"),
+  episodeOutcome: document.getElementById("episode-outcome"),
+  worldSystems: document.getElementById("world-systems"),
   pause: document.getElementById("pause"),
   speed: document.getElementById("speed"),
   voices: document.getElementById("voices"),
+  sound: document.getElementById("sound"),
   volume: document.getElementById("volume"),
+  cinematic: document.getElementById("cinematic"),
   labels: document.getElementById("location-labels"),
   speech: document.getElementById("speech-layer"),
   notice: document.getElementById("notice"),
+  vfxFlash: document.getElementById("vfx-flash"),
 };
 
 const LOCATION_POINTS = {
   main_tent: [0, 0, 0], center_stage: [0, 0, -13], bedroom_hall: [-19, 0, 8],
   dining_hall: [19, 0, 8], backstage: [0, 0, 16], adventure_portal: [20, 0, -13],
+  mirror_maze: [-20, 0, -13], moon_carnival: [-27, 0, -1], candy_kingdom: [27, 0, -1],
 };
 const CHARACTER_COLORS = {
   pomni: "#ef3e4d", ragatha: "#496fc7", jax: "#8e58bd",
@@ -56,13 +64,23 @@ const NAV_ROUTES = {
 };
 const worldView = { engine: null, scene: null, camera: null, sun: null, state: null, socket: null,
   locations: new Map(), characters: new Map(), objects: new Map(), paths: new Set(), reconnects: 0,
-  rain: null, locationIndex: 0, sessionId: null, lastMessageId: 0, lastSeenAt: 0 };
+  rain: null, locationIndex: 0, sessionId: null, lastMessageId: 0, lastSeenAt: 0,
+  gloinks: [], showLights: [], portalRings: [], renderPaused: false };
 const voiceState = {
   supported: "speechSynthesis" in window && "SpeechSynthesisUtterance" in window,
   enabled: localStorage.getItem("circus-voices") !== "off",
   volume: Number(localStorage.getItem("circus-volume") ?? .8),
   voices: [],
 };
+const cameraDirector = {
+  enabled: localStorage.getItem("circus-cinematic") !== "off",
+  manualUntil: 0, followId: null, followUntil: 0, lastShotAt: 0,
+};
+const soundState = {
+  enabled: localStorage.getItem("circus-sound") !== "off",
+  context: null, master: null, ambient: [], started: false,
+};
+const performanceState = { lastCheck: 0, quality: 1 };
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -119,6 +137,10 @@ function createWorld() {
   sun.position = new BABYLON.Vector3(20, 35, -20);
   sun.intensity = 1.25;
   worldView.sun = sun;
+  [[-15,12,-8,"#ff4964"],[15,12,-8,"#55d9ef"],[0,16,14,"#ffe06a"]].forEach(([x,y,z,color], index) => {
+    const light = new BABYLON.SpotLight(`show-light-${index}`, new BABYLON.Vector3(x,y,z), new BABYLON.Vector3(-x,-y,-z).normalize(), Math.PI/2.8, 9, scene);
+    light.diffuse = BABYLON.Color3.FromHexString(color); light.intensity = 55; worldView.showLights.push(light);
+  });
 
   const ground = BABYLON.MeshBuilder.CreateCylinder("circus-floor", { diameter: 72, height: .25, tessellation: 64 }, scene);
   ground.position.y = -.13;
@@ -143,8 +165,9 @@ function createWorld() {
   createCircusInterior();
   createRain();
   scene.onBeforeRenderObservable.add(animateWorld);
-  worldView.engine.runRenderLoop(() => scene.render());
+  worldView.engine.runRenderLoop(() => { if (!worldView.renderPaused) scene.render(); });
   window.addEventListener("resize", () => worldView.engine.resize());
+  document.addEventListener("visibilitychange", () => { worldView.renderPaused = document.hidden; });
 }
 
 function beamBetween(name, from, to, diameter, mat) {
@@ -336,9 +359,25 @@ function buildLocation(location) {
     colors.forEach((color,i) => {
       const portal = addPrimitive(root, "CreateTorus", `portal-ring-${i}`, { diameter: 8-i*1.2, thickness: .42, tessellation: 40 }, [0,4,0], material(`portal-mat-${i}`, color, .18));
       portal.rotation.x = Math.PI/2;
+      worldView.portalRings.push(portal);
     });
     const door = addPrimitive(root, "CreateBox", "portal-void", { width: 5.2, height: 6.8, depth: .35 }, [0,3.4,.15], material("portal-void-mat", "#1e102c", .1));
     door.metadata = { portal: true };
+  } else if (location.id === "mirror_maze") {
+    const mirror = material("mirror-silver", "#b8e5e8", .08); mirror.metallic = .72;
+    for (let i=0;i<7;i++) {
+      const panel = addPrimitive(root,"CreateBox",`mirror-panel-${i}`,{width:1.7,height:5.5,depth:.18},[-5+i*1.7,2.75,Math.sin(i)*1.5],mirror);
+      panel.rotation.y=(i%2?.38:-.38);
+    }
+    addPrimitive(root,"CreateTorus","mirror-arch",{diameter:7,thickness:.38,tessellation:30},[0,3.5,2],material("mirror-arch-mat","#57d1dc",.2)).rotation.x=Math.PI/2;
+  } else if (location.id === "moon_carnival") {
+    const wheel=addPrimitive(root,"CreateTorus","memory-wheel",{diameter:7,thickness:.34,tessellation:36},[0,4,0],material("moon-wheel","#d5deef",.2)); wheel.rotation.x=Math.PI/2;
+    for(let i=0;i<8;i++){const a=i/8*Math.PI*2;addPrimitive(root,"CreateBox",`memory-car-${i}`,{size:.7},[Math.cos(a)*3.5,4+Math.sin(a)*3.5,-.3],material(`memory-car-mat-${i}`,i%2?"#7b5fc5":"#5fc8dc"));}
+    addPrimitive(root,"CreateSphere","painted-moon",{diameter:3.2,segments:16},[-3,7,2],material("moon","#f4e7a4",.25));
+  } else if (location.id === "candy_kingdom") {
+    const peppermint=material("peppermint","#e54855"); const frosting=material("candy-frosting","#f7d9e6");
+    [-3,0,3].forEach((x,i)=>{addPrimitive(root,"CreateCylinder",`candy-tower-${i}`,{diameter:2.2,height:3.5+i*.6,tessellation:16},[x,1.75+i*.3,0],i%2?frosting:peppermint);addPrimitive(root,"CreateCylinder",`candy-roof-${i}`,{diameterTop:0,diameterBottom:2.8,height:2,tessellation:14},[x,4.5+i*.6,0],i%2?peppermint:frosting);});
+    for(let i=0;i<5;i++) addPrimitive(root,"CreateSphere",`gumdrop-${i}`,{diameter:1.1,segments:10},[-4+i*2,.55,2.3],material(`gumdrop-mat-${i}`,i%2?"#66d09f":"#e6c94b"));
   } else {
     addPrimitive(root, "CreateCylinder", `${location.id}-marker`, { diameter: 6, height: .3, tessellation: 12 }, [0,.15,0], zoneMat);
   }
@@ -455,10 +494,20 @@ function createCharacter(character, index) {
     addPrimitive(rightLeg,"CreateBox","zooble-right-leg",{width:.38,height:1.55,depth:.38},[0,-.7,0],red);
   }
   const location = worldView.locations.get(character.location_id);
+  const faceY = { pomni: 3.15, ragatha: 3.04, jax: 3.43, gangle: 3.2, kinger: 3.02, zooble: 3.38 }[character.id] || 3.1;
+  const mouth = addPrimitive(root, "CreateBox", `${character.id}-expression-mouth`, { width: .46, height: .075, depth: .07 }, [0,faceY,-.63], dark);
+  const browLeft = addPrimitive(root, "CreateBox", `${character.id}-brow-left`, { width: .34, height: .07, depth: .06 }, [-.24,faceY+.54,-.61], dark);
+  const browRight = addPrimitive(root, "CreateBox", `${character.id}-brow-right`, { width: .34, height: .07, depth: .06 }, [.24,faceY+.54,-.61], dark);
+  const eyes = root.getChildMeshes().filter(mesh => mesh.name.includes("eye"));
+  const heads = root.getChildMeshes().filter(mesh => mesh.name.includes("head") || mesh.name.includes("mask"));
   const offset = new BABYLON.Vector3(Math.cos(index*2.15)*1.65, 0, Math.sin(index*2.15)*1.65);
   root.position = (location ? location.root.position : BABYLON.Vector3.Zero()).add(offset);
   root.getChildMeshes().forEach(mesh => { mesh.checkCollisions = true; });
-  worldView.characters.set(character.id, { root, leftArm, rightArm, leftLeg, rightLeg, color, locationId: character.location_id, movingUntil: 0, talkingUntil: 0, offset, movement: null });
+  worldView.characters.set(character.id, {
+    root, leftArm, rightArm, leftLeg, rightLeg, mouth, brows: [browLeft,browRight], eyes, heads,
+    color, locationId: character.location_id, movingUntil: 0, talkingUntil: 0, gestureUntil: 0,
+    offset, movement: null, expression: "curiosity",
+  });
 }
 
 function navigationRoute(fromId, toId, view) {
@@ -516,6 +565,29 @@ function syncObjects(objects) {
   }
 }
 
+function syncGloinks(population) {
+  const visibleCount = Math.min(12, Math.max(0, Number(population) || 0));
+  while (worldView.gloinks.length > visibleCount) worldView.gloinks.pop().dispose();
+  while (worldView.gloinks.length < visibleCount) {
+    const index = worldView.gloinks.length;
+    const gloink = BABYLON.MeshBuilder.CreatePolyhedron(`gloink-${index}`, { type: 2, size: .48 }, worldView.scene);
+    gloink.material = material(`gloink-mat-${index}`, index % 2 ? "#65dce1" : "#e8d04c", .28);
+    gloink.metadata = { home: new BABYLON.Vector3(-5 + (index%6)*1.8, .62, 12 + Math.floor(index/6)*1.8), phase: index * .83 };
+    gloink.position.copyFrom(gloink.metadata.home);
+    worldView.shadow.addShadowCaster(gloink);
+    worldView.gloinks.push(gloink);
+  }
+}
+
+function updateSystemLighting(systems) {
+  if (!systems || !worldView.scene) return;
+  const stability = Number(systems.digital_stability ?? 1);
+  worldView.scene.imageProcessingConfiguration.contrast = 1.02 + stability * .14;
+  worldView.showLights.forEach((light, index) => {
+    light.intensity = 38 + Number(systems.audience_excitement ?? .4) * 42 + index * 3;
+  });
+}
+
 function applyState(state) {
   worldView.state = state;
   state.locations.forEach(buildLocation);
@@ -524,8 +596,11 @@ function applyState(state) {
     if (!worldView.characters.has(character.id)) createCharacter(character, index);
     const view = worldView.characters.get(character.id);
     if (view.locationId !== character.location_id) moveCharacter(view, character.location_id);
+    view.expression = character.dominant_emotion || "curiosity";
   });
   syncObjects(state.objects || []);
+  syncGloinks(state.systems?.gloink_population || 0);
+  updateSystemLighting(state.systems);
   updateWeather(state.weather, state.time.is_night);
   renderDashboard(state);
 }
@@ -552,10 +627,58 @@ function animateWorld() {
     const swing = walking ? Math.sin(now * .012) * .55 : talking ? Math.sin(now * .018) * .28 : Math.sin(now * .002) * .04;
     view.leftArm.rotation.x = swing; view.rightArm.rotation.x = -swing;
     view.leftLeg.rotation.x = -swing; view.rightLeg.rotation.x = swing;
+    const expression = view.expression;
+    const blink = now % (3100 + view.root.uniqueId * 17) < 110 ? .08 : 1;
+    const eyeTarget = (expression === "fear" || expression === "anxiety" ? 1.38 : expression === "anger" ? .55 : expression === "happiness" ? .76 : 1) * blink;
+    view.eyes.forEach(eye => { eye.scaling.y += (eyeTarget - eye.scaling.y) * .22; });
+    const headTilt = expression === "curiosity" ? .13 : expression === "loneliness" ? -.1 : expression === "anger" ? -.06 : 0;
+    view.heads.forEach(head => { head.rotation.z += (headTilt - head.rotation.z) * .08; });
+    view.mouth.scaling.x += ((expression === "happiness" ? 1.35 : expression === "fear" ? .55 : expression === "anger" ? .9 : 1) - view.mouth.scaling.x) * .12;
+    view.mouth.scaling.y += ((expression === "fear" || expression === "anxiety" ? 3.4 : 1) - view.mouth.scaling.y) * .12;
+    const browAngle = expression === "anger" ? .24 : expression === "fear" || expression === "anxiety" ? -.2 : 0;
+    view.brows[0].rotation.z += (browAngle - view.brows[0].rotation.z) * .13;
+    view.brows[1].rotation.z += (-browAngle - view.brows[1].rotation.z) * .13;
+    if (now >= view.gestureUntil) {
+      const armPosture = expression === "fear" ? .28 : expression === "anger" ? -.18 : expression === "happiness" ? .12 : 0;
+      view.leftArm.rotation.z += (-armPosture - view.leftArm.rotation.z) * .08;
+      view.rightArm.rotation.z += (armPosture - view.rightArm.rotation.z) * .08;
+    }
     if (!walking) view.root.position.y = Math.sin(now * (talking ? .007 : .0015) + view.root.uniqueId) * (talking ? .08 : .035);
   }
   for (const object of worldView.objects.values()) object.mesh.rotation.y += .008;
+  worldView.gloinks.forEach((gloink, index) => {
+    const phase = now * .0012 + gloink.metadata.phase;
+    gloink.position.x = gloink.metadata.home.x + Math.sin(phase) * 1.25;
+    gloink.position.z = gloink.metadata.home.z + Math.cos(phase * .77) * .8;
+    gloink.position.y = .62 + Math.abs(Math.sin(phase * 2.4)) * .42;
+    gloink.rotation.y += .018 + index * .0002;
+  });
+  worldView.portalRings.forEach((ring, index) => { ring.rotation.z += (index % 2 ? -.004 : .004) * (index + 1); });
+  worldView.showLights.forEach((light, index) => { light.direction.x = Math.sin(now*.00035 + index*2) * .35; });
+  if (now - performanceState.lastCheck > 3000 && worldView.engine) {
+    const fps = worldView.engine.getFps();
+    const nextQuality = fps < 34 ? 1.6 : fps < 48 ? 1.25 : fps > 57 ? 1 : performanceState.quality;
+    if (nextQuality !== performanceState.quality) {
+      performanceState.quality = nextQuality;
+      worldView.engine.setHardwareScalingLevel(nextQuality);
+    }
+    performanceState.lastCheck = now;
+  }
+  updateCameraDirector(now);
   positionOverlays();
+}
+
+function updateCameraDirector(now) {
+  if (!cameraDirector.enabled || now < cameraDirector.manualUntil) return;
+  if (cameraDirector.followId && now < cameraDirector.followUntil) {
+    const target = worldView.characters.get(cameraDirector.followId)?.root.position;
+    if (target) worldView.camera.target = BABYLON.Vector3.Lerp(worldView.camera.target, target, .035);
+  } else if (now - cameraDirector.lastShotAt > 22000 && worldView.state) {
+    const adventure = worldView.state.adventures?.find(item => item.status === "active");
+    const targetId = adventure?.participants?.[0];
+    if (targetId) frameCharacter(targetId, "medium");
+    else frameLocation("main_tent", "wide");
+  }
 }
 
 function screenPoint(position) {
@@ -584,7 +707,11 @@ function renderDashboard(state) {
   ui.tick.textContent = `Tick ${state.tick}`;
   if (state.director) {
     const suffix = state.director.last_event_day === state.time.day ? "today's adventure is live" : "preparing today's adventure";
-    ui.director.textContent = `${state.director.name} · ${suffix}`;
+    const pacing = state.director.pacing;
+    ui.director.textContent = pacing
+      ? `${state.director.name} · ${pacing.arc_stage.replaceAll("_", " ")} · tension ${Math.round(pacing.tension*100)}%`
+      : `${state.director.name} · ${suffix}`;
+    ui.director.title = suffix;
   }
   ui.population.textContent = String(state.characters.length);
   const locationNames = new Map(state.locations.map(item => [item.id, item.name]));
@@ -597,23 +724,45 @@ function renderDashboard(state) {
     identity.appendChild(node("span", "character-place", locationNames.get(character.location_id) || character.location_id));
     top.appendChild(identity); top.appendChild(node("span", "emotion", character.dominant_emotion)); card.appendChild(top);
     card.appendChild(node("p", "intention", character.intention ? character.intention.description : character.goal || "Observing the world"));
+    if (character.psychology) {
+      const mind = node("p", "psychology-line", `${Math.round(character.psychology.reputation*100)}% reputation${character.psychology.strongest_habit ? ` · habit: ${character.psychology.strongest_habit}` : ""}`);
+      mind.title = `${character.psychology.identity}\nAmbition: ${character.psychology.ambition}`;
+      card.appendChild(mind);
+    }
     const energy = node("div", "energy-row"); energy.appendChild(node("span", "", "Energy"));
     const track = node("div", "energy-track"); const fill = node("div", "energy-fill");
     fill.style.width = `${Math.max(0, Math.min(100, character.physical.energy / character.physical.max_energy * 100))}%`;
     track.appendChild(fill); energy.appendChild(track); energy.appendChild(node("span", "", `${character.physical.energy}/${character.physical.max_energy}`)); card.appendChild(energy);
     card.addEventListener("click", () => focusCharacter(character.id)); ui.characters.appendChild(card);
   });
-  renderAdventure(state.adventures || []);
+  renderAdventure(state.adventures || [], state.episodes || [], state.systems || null);
 }
 
-function renderAdventure(adventures) {
+function renderAdventure(adventures, episodes, systems) {
   const adventure = adventures.find(item => item.status === "active") || adventures[adventures.length - 1];
-  if (!adventure) { ui.adventurePanel.classList.add("hidden"); return; }
-  ui.adventurePanel.classList.remove("hidden"); ui.adventureTitle.textContent = adventure.title;
-  ui.adventurePremise.textContent = adventure.status === "resolved" ? adventure.outcome || "The adventure is resolved." : adventure.premise;
-  ui.adventureStakes.textContent = adventure.status === "resolved" ? `Resolved by ${adventure.resolved_by || "the group"}` : `At stake: ${adventure.stakes}`;
-  ui.adventurePhases.replaceChildren(); const phaseIndex = PHASES.indexOf(adventure.phase);
+  const episode = episodes.find(item => item.status === "active") || episodes[episodes.length - 1];
+  ui.adventurePanel.classList.remove("hidden");
+  ui.adventureTitle.textContent = adventure?.title || "The circus between adventures";
+  const adventureEnded = adventure && adventure.status !== "active";
+  ui.adventurePremise.textContent = adventure ? (adventureEnded ? adventure.outcome || `The adventure ${adventure.status}.` : adventure.premise) : "The cast's choices continue to change the tent.";
+  ui.adventureStakes.textContent = adventure ? (adventureEnded ? `${adventure.status === "resolved" ? "Resolved" : "Expired"} by ${adventure.resolved_by || "world events"}` : `At stake: ${adventure.stakes}`) : "Caine creates one new event each world day.";
+  ui.adventurePhases.replaceChildren(); const phaseIndex = adventure ? PHASES.indexOf(adventure.phase) : -1;
   PHASES.forEach((phase, index) => { const segment = node("i", `phase ${index <= phaseIndex ? "done" : ""}`); segment.title = phase; ui.adventurePhases.appendChild(segment); });
+  ui.episodeNumber.textContent = episode ? `Episode ${episode.number} · ${episode.status}` : "Episode waiting";
+  ui.episodeTitle.textContent = episode?.title || "The next circus day has not begun";
+  ui.episodeOutcome.textContent = episode?.key_outcomes?.at(-1) || episode?.premise || "Caine is preparing a premise.";
+  ui.worldSystems.replaceChildren();
+  if (systems) {
+    const meters = [
+      ["Show", String(systems.show_phase || "unknown").replaceAll("_", " ")],
+      ["Stability", `${Math.round(systems.digital_stability*100)}%`],
+      ["Audience", `${Math.round(systems.audience_excitement*100)}%`],
+      ["Cohesion", `${Math.round(systems.cast_cohesion*100)}%`],
+      ["Props", `${Math.round(systems.prop_condition*100)}%`],
+      ["Gloinks", String(systems.gloink_population)],
+    ];
+    meters.forEach(([label, value]) => { const meter = node("div", "system-meter"); meter.append(node("span", "", label), node("b", "", value)); ui.worldSystems.appendChild(meter); });
+  }
 }
 
 function addEvents(events, replace = false) {
@@ -628,8 +777,67 @@ function addEvents(events, replace = false) {
   while (ui.events.children.length > 24) ui.events.lastElementChild.remove();
 }
 
+function startAudio() {
+  if (!soundState.enabled) return;
+  if (!soundState.context) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) { ui.sound.disabled = true; ui.sound.textContent = "Sound unavailable"; return; }
+    soundState.context = new AudioContext();
+    soundState.master = soundState.context.createGain();
+    soundState.master.gain.value = .16;
+    soundState.master.connect(soundState.context.destination);
+  }
+  soundState.context.resume();
+  if (soundState.started) return;
+  soundState.started = true;
+  [130.81, 196, 261.63].forEach((frequency, index) => {
+    const oscillator = soundState.context.createOscillator();
+    const gain = soundState.context.createGain();
+    oscillator.type = index === 1 ? "triangle" : "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.value = index === 2 ? .012 : .018;
+    oscillator.connect(gain); gain.connect(soundState.master); oscillator.start();
+    soundState.ambient.push({ oscillator, gain });
+  });
+}
+
+function playEventSound(kind) {
+  if (!soundState.enabled || !soundState.context || !soundState.master) return;
+  const now = soundState.context.currentTime;
+  const oscillator = soundState.context.createOscillator();
+  const gain = soundState.context.createGain();
+  const important = kind.includes("adventure") || kind === "environment_changed";
+  oscillator.type = kind === "action_rejected" || kind === "lied" ? "sawtooth" : "triangle";
+  oscillator.frequency.setValueAtTime(important ? 392 : 523.25, now);
+  oscillator.frequency.exponentialRampToValueAtTime(important ? 783.99 : 659.25, now + .18);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(important ? .22 : .08, now + .018);
+  gain.gain.exponentialRampToValueAtTime(.0001, now + (important ? .55 : .22));
+  oscillator.connect(gain); gain.connect(soundState.master); oscillator.start(now); oscillator.stop(now + .6);
+}
+
+function burstConfetti(locationId) {
+  const origin = worldView.locations.get(locationId)?.root.position || new BABYLON.Vector3(0,5,0);
+  const texture = new BABYLON.DynamicTexture("confetti-pixel", 16, worldView.scene, false);
+  const context = texture.getContext(); context.fillStyle = "white"; context.fillRect(2,2,12,12); texture.hasAlpha = true; texture.update();
+  const particles = new BABYLON.ParticleSystem("episode-confetti", 110, worldView.scene);
+  particles.particleTexture = texture; particles.emitter = origin.add(new BABYLON.Vector3(0,4,0));
+  particles.color1 = new BABYLON.Color4(1,.25,.35,1); particles.color2 = new BABYLON.Color4(.25,.85,1,1); particles.colorDead = new BABYLON.Color4(1,.85,.2,0);
+  particles.minSize=.08; particles.maxSize=.28; particles.minLifeTime=.8; particles.maxLifeTime=1.8;
+  particles.emitRate=0; particles.manualEmitCount=90; particles.minEmitPower=3; particles.maxEmitPower=8;
+  particles.direction1=new BABYLON.Vector3(-1.8,4,-1.8); particles.direction2=new BABYLON.Vector3(1.8,7,1.8); particles.gravity=new BABYLON.Vector3(0,-8,0);
+  particles.start(); window.setTimeout(() => { particles.stop(); particles.dispose(); texture.dispose(); }, 2300);
+}
+
+function glitchFlash() {
+  ui.vfxFlash.classList.remove("active");
+  void ui.vfxFlash.offsetWidth;
+  ui.vfxFlash.classList.add("active");
+}
+
 function animateEvents(events) {
   for (const event of events) {
+    playEventSound(event.kind);
     if ((event.kind === "spoke" || event.kind === "lied") && event.actor_id) {
       const words = event.data.message || event.summary;
       showSpeech(event.actor_id, words); speak(event.actor_id, words);
@@ -638,12 +846,16 @@ function animateEvents(events) {
       showSpeech("caine", event.summary); speak("caine", event.summary);
     }
     if (event.kind.includes("adventure") && event.location_id) pulseLocation(event.location_id);
+    if (event.kind === "adventure_resolved") burstConfetti(event.location_id || "center_stage");
+    if (event.kind === "adventure_started" || event.kind === "environment_changed") glitchFlash();
     if (event.actor_id) animateAction(event);
   }
+  directCamera(events);
 }
 
 function animateAction(event) {
   const view = worldView.characters.get(event.actor_id); if (!view || event.kind === "moved") return;
+  view.gestureUntil = performance.now() + 1200;
   if (["spoke", "lied", "helped"].includes(event.kind)) {
     const arm = event.kind === "helped" ? view.leftArm : view.rightArm;
     BABYLON.Animation.CreateAndStartAnimation("gesture", arm, "rotation.z", 30, 24, 0, event.kind === "lied" ? -1.2 : 1.1, BABYLON.Animation.ANIMATIONLOOPMODE_YOYO);
@@ -657,6 +869,47 @@ function animateAction(event) {
   } else {
     pulseCharacter(event.actor_id);
   }
+}
+
+function directCamera(events) {
+  if (!cameraDirector.enabled || performance.now() < cameraDirector.manualUntil || !events.length) return;
+  const score = event => event.importance + (event.kind.includes("adventure") ? .6 : event.kind === "spoke" ? .18 : event.kind === "weather_changed" ? .3 : 0);
+  const focus = events.slice().sort((a,b) => score(b)-score(a))[0];
+  if (!focus) return;
+  if (focus.actor_id) {
+    const targetId = focus.data?.target_id;
+    if (targetId && worldView.characters.has(targetId) && ["spoke","lied","helped"].includes(focus.kind)) frameConversation(focus.actor_id, targetId);
+    else frameCharacter(focus.actor_id, score(focus) > 1 ? "close" : "medium");
+  } else if (["adventure_started","situation_created","weather_changed","environment_changed"].includes(focus.kind)) {
+    if (focus.kind === "adventure_started" && worldView.caine) framePoint(worldView.caine.position, "close");
+    else if (focus.location_id) frameLocation(focus.location_id, "wide");
+  }
+}
+
+function frameConversation(firstId, secondId) {
+  const first = worldView.characters.get(firstId)?.root.position;
+  const second = worldView.characters.get(secondId)?.root.position;
+  if (!first || !second) return;
+  framePoint(BABYLON.Vector3.Center(first, second), "medium");
+  cameraDirector.followId = firstId; cameraDirector.followUntil = performance.now() + 6500;
+}
+
+function frameCharacter(characterId, shot = "medium") {
+  const view = worldView.characters.get(characterId); if (!view) return;
+  framePoint(view.root.position, shot); cameraDirector.followId = characterId;
+  cameraDirector.followUntil = performance.now() + 7000;
+}
+
+function frameLocation(locationId, shot = "wide") {
+  const location = worldView.locations.get(locationId); if (location) framePoint(location.root.position, shot);
+}
+
+function framePoint(point, shot) {
+  const radius = shot === "close" ? 17 : shot === "wide" ? 46 : 27;
+  const ease = new BABYLON.CubicEase(); ease.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+  BABYLON.Animation.CreateAndStartAnimation("cinematic-target", worldView.camera, "target", 30, 42, worldView.camera.target.clone(), point.clone(), BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
+  BABYLON.Animation.CreateAndStartAnimation("cinematic-radius", worldView.camera, "radius", 30, 42, worldView.camera.radius, radius, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT, ease);
+  cameraDirector.lastShotAt = performance.now();
 }
 
 function showSpeech(actorId, message) {
@@ -779,13 +1032,32 @@ ui.voices.addEventListener("click", () => {
   if (!voiceState.enabled && voiceState.supported) window.speechSynthesis.cancel();
   renderVoiceControls();
 });
+ui.sound.addEventListener("click", () => {
+  soundState.enabled = !soundState.enabled;
+  localStorage.setItem("circus-sound", soundState.enabled ? "on" : "off");
+  ui.sound.textContent = soundState.enabled ? "Sound on" : "Sound off";
+  if (soundState.enabled) {
+    startAudio();
+    if (soundState.master) soundState.master.gain.value = .16;
+  } else if (soundState.master) soundState.master.gain.value = 0;
+});
+ui.cinematic.addEventListener("click", () => {
+  cameraDirector.enabled = !cameraDirector.enabled;
+  localStorage.setItem("circus-cinematic", cameraDirector.enabled ? "on" : "off");
+  ui.cinematic.textContent = cameraDirector.enabled ? "Cinematic on" : "Cinematic off";
+  cameraDirector.manualUntil = 0;
+});
+ui.cinematic.textContent = cameraDirector.enabled ? "Cinematic on" : "Cinematic off";
+ui.canvas.addEventListener("pointerdown", () => { cameraDirector.manualUntil = performance.now() + 12000; });
 ui.volume.addEventListener("input", () => {
   voiceState.volume = Number(ui.volume.value); localStorage.setItem("circus-volume", String(voiceState.volume));
 });
 refreshVoices();
+ui.sound.textContent = soundState.enabled ? "Sound on" : "Sound off";
 if (voiceState.supported) window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
 window.addEventListener("pointerdown", () => {
   if (voiceState.supported && voiceState.enabled) window.speechSynthesis.resume();
+  startAudio();
 }, { once: true });
 renderVoiceControls();
 window.setInterval(() => {

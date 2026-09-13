@@ -78,6 +78,34 @@ CIRCUS_ADVENTURES = (
             "A towering prize wheel spins through symbols that do not fit inside ordinary geometry."
         ),
     ),
+    AdventureTemplate(
+        id="moonlight_funfair",
+        title="The Moonlight Funfair",
+        premise="Caine opens a midnight carnival where every ride is powered by a missing memory.",
+        mystery="Why does the carousel know details the cast can no longer remember?",
+        stakes="The funfair may keep the memories permanently if its final ride completes a circuit.",
+        hook_name="remembering_carousel",
+        hook_description="A tiny carousel hums a melody that each character recognizes differently.",
+        clue_name="a moon-stamped ride token",
+        clue_description="The silver token projects a route through an unopened lunar doorway.",
+        hidden_location_id="moon_carnival",
+        escalation_name="memory_ferris_wheel",
+        escalation_description="A vast wheel turns overhead, displaying stolen memories in its carriages.",
+    ),
+    AdventureTemplate(
+        id="confection_kingdom",
+        title="The Confection Kingdom Coup",
+        premise="Caine declares the cast diplomatic envoys to a dessert kingdom in the middle of a coup.",
+        mystery="Who replaced the candy crown, and why is the new one whispering orders?",
+        stakes="The unstable kingdom will melt into the circus and trap the cast in an endless banquet.",
+        hook_name="royal_sugar_summons",
+        hook_description="A frosting-sealed invitation demands six envoys and refuses to be discarded.",
+        clue_name="a crystallized crown fragment",
+        clue_description="The sugar crystal points toward a peppermint door hidden beyond the tent.",
+        hidden_location_id="candy_kingdom",
+        escalation_name="whispering_candy_crown",
+        escalation_description="The false crown grows new jeweled eyes whenever someone obeys it.",
+    ),
 )
 
 

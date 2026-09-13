@@ -236,6 +236,7 @@ class World:
             {
                 "adventure_id": adventure.id,
                 "title": adventure.title,
+                "premise": adventure.premise,
                 "feature_id": adventure.hook_feature_id,
                 "description": adventure.hook_description,
                 "phase": adventure.phase.value,
@@ -683,7 +684,7 @@ class World:
                 EventKind.WEATHER_CHANGED,
                 None,
                 f"Director: weather changes from {before.value} to {self.weather.value}.",
-                {"before": before.value, "after": self.weather.value},
+                {"before": before.value, "after": self.weather.value, "title": request.title},
                 importance=0.7,
             )
         elif request.kind is DirectorEventKind.OBJECT:
@@ -703,7 +704,7 @@ class World:
                 EventKind.ENVIRONMENT_CHANGED,
                 None,
                 f"Director: {request.title} appears at {self.locations[request.location_id].name}.",
-                {"object_id": obj.id, "director_kind": request.kind.value},
+                {"object_id": obj.id, "director_kind": request.kind.value, "title": request.title},
                 location_id=request.location_id,
                 importance=0.75,
             )
@@ -726,6 +727,7 @@ class World:
                     "from": request.location_id,
                     "to": request.destination_id,
                     "director_kind": request.kind.value,
+                    "title": request.title,
                 },
                 location_id=request.location_id,
                 importance=0.8,
@@ -745,6 +747,7 @@ class World:
                     "feature_id": feature_id,
                     "description": request.description,
                     "director_kind": request.kind.value,
+                    "title": request.title,
                 },
                 location_id=request.location_id,
                 importance=0.7,

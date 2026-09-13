@@ -48,6 +48,12 @@
     <p id="adventure-premise"></p>
     <div id="adventure-phases" class="phases"></div>
     <p id="adventure-stakes" class="stakes"></p>
+    <div class="episode-summary">
+      <span id="episode-number" class="eyebrow">Episode waiting</span>
+      <strong id="episode-title">The next circus day has not begun</strong>
+      <small id="episode-outcome">Caine is preparing a premise.</small>
+    </div>
+    <div id="world-systems" class="world-systems" aria-label="Circus systems"></div>
   </aside>
 
   <section class="event-console glass" aria-label="World event log">
@@ -58,10 +64,12 @@
       </div>
       <div class="playback">
         <button id="voices" type="button" title="Turn character voices on or off">Voices on</button>
+        <button id="sound" type="button" title="Turn music and effects on or off">Sound on</button>
         <label class="volume-control" title="Voice volume">
           <span class="sr-only">Voice volume</span>
           <input id="volume" type="range" min="0" max="1" step="0.1" value="0.8" aria-label="Voice volume">
         </label>
+        <button id="cinematic" type="button" title="Toggle the autonomous camera director">Cinematic on</button>
         <button id="pause" type="button" title="Pause or resume the simulation">Pause</button>
         <label>
           <span class="sr-only">Playback speed</span>
@@ -78,6 +86,7 @@
   </section>
 
   <div class="camera-help glass">Drag to orbit · Scroll to zoom · Select a character to follow</div>
+  <div id="vfx-flash" aria-hidden="true"></div>
   <div id="notice" class="notice hidden" role="alert"></div>
 
   <script src="https://cdn.babylonjs.com/babylon.js"></script>

@@ -1663,6 +1663,10 @@ gesture selection
 emotion-driven animation
 ```
 
+Expose procedural face controls for eyes, brows, mouth, blink, and head angle. Blend
+dominant emotion into facial pose and body posture while allowing validated actions and
+speech to select temporary gestures.
+
 ---
 
 ## STAGE 14 — Camera AI
@@ -1677,6 +1681,10 @@ choosing viewpoints
 framing conversations
 showing environmental events
 ```
+
+Score authoritative events by visual interest. Use eased close, medium, wide,
+conversation, follow, establishing, and Caine announcement shots. Manual observer input
+temporarily overrides the camera AI and never affects world state.
 
 ---
 
@@ -1696,6 +1704,12 @@ major events
 
 Preserve character autonomy.
 
+Persist a compact pacing model containing tension, arc stage, quiet time, focus character,
+development opportunity, major-event count, and world expansion. Derive pacing from
+adventure phase, public emotion, activity, and relationship tension. Offer personal
+development circumstances, multi-day adventure arcs, major events, and validated new
+paths while retaining Caine's once-per-day limit and total inability to issue character actions.
+
 ---
 
 ## STAGE 16 — Persistent World
@@ -1713,6 +1727,11 @@ locations
 objects
 major consequences
 ```
+
+Implemented with versioned full-state JSON, atomic replacement, last-known-good backup
+recovery, and forward migration of existing circus saves. The save includes private
+memory and psychology, the complete event history, mutable geography and objects,
+world-system state, the episode chronicle, and durable major consequences.
 
 ---
 
@@ -1735,6 +1754,11 @@ political/social systems
 
 Only add systems that create meaningful emergent behavior.
 
+Implemented circus-specific systems: digital stability, audience excitement, cast
+cohesion, prop condition, food supply, deterministic show/environment cycles, Gloink
+NPC population, cast/Caine/Gloink influence, and persistent constructed or damaged set
+pieces. These systems react only to authoritative events and are visible in the browser.
+
 ---
 
 ## STAGE 18 — Advanced Character Psychology
@@ -1755,6 +1779,11 @@ preferences
 secrets
 ```
 
+Implemented as persistent per-character psychology. Repeated validated choices reinforce
+habits; helping and deception change reputation and social status; received statements
+form confidence-weighted subjective beliefs. Psychology influences decision scoring and
+provider context, while secrets remain private and never appear in observer snapshots.
+
 ---
 
 ## STAGE 19 — Production Presentation
@@ -1774,6 +1803,11 @@ camera transitions
 UI
 performance
 ```
+
+Implemented with procedural character rigs and expressions, show spotlights, animated
+portals and Gloinks, confetti and glitch VFX, browser-native ambient music and event
+sounds, speech synthesis, cinematic easing, system-rich UI, adaptive render scaling,
+and hidden-tab render suspension. No external 3D or audio production assets are required.
 
 ---
 
@@ -1805,6 +1839,11 @@ important characters
 key outcomes
 memorable moments
 ```
+
+Implemented as an event-driven, persistent chronicle. Director incidents open episodes;
+authoritative events select important characters, major sequences, and memorable moments;
+adventure resolution or a world-day boundary closes the episode with accumulated outcomes.
+The episode list and major consequences are exposed to the observer without private state.
 
 ---
 

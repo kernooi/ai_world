@@ -59,6 +59,17 @@ def world_snapshot(simulation: Simulation, *, event_limit: int = 80) -> dict[str
                 "emotions": emotions,
                 "dominant_emotion": dominant_emotion,
                 "goal": goal.description if goal else None,
+                "psychology": {
+                    "identity": character.psychology.identity,
+                    "ambition": character.psychology.long_term_ambition,
+                    "social_status": round(character.psychology.social_status, 3),
+                    "reputation": round(character.psychology.reputation, 3),
+                    "strongest_habit": (
+                        max(character.psychology.habits, key=character.psychology.habits.get)
+                        if character.psychology.habits
+                        else None
+                    ),
+                },
                 "intention": (
                     {
                         "description": intention.description,
@@ -87,7 +98,12 @@ def world_snapshot(simulation: Simulation, *, event_limit: int = 80) -> dict[str
             "status": simulation.director.status,
             "once_per_day": simulation.director.once_per_day,
             "last_event_day": simulation.director.last_intervention_day,
+            "advanced": simulation.director.advanced,
+            "pacing": simulation.director.pacing.to_dict(),
         },
+        "systems": simulation.systems.to_dict(),
+        "episodes": [episode.to_dict() for episode in simulation.episodes.episodes[-12:]],
+        "major_consequences": [dict(item) for item in simulation.episodes.major_consequences[-20:]],
         "locations": [
             {
                 "id": location.id,

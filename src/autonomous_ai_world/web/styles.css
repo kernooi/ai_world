@@ -123,6 +123,7 @@ h2 { margin-top: 3px; font-size: 17px; font-weight: 650; }
 .character-place { display: block; color: var(--muted); margin-top: 2px; font-size: 10px; }
 .emotion { margin-left: auto; align-self: flex-start; color: var(--mint); font-size: 10px; text-transform: capitalize; }
 .intention { margin: 9px 0 8px; color: #dbe7df; font-size: 11px; line-height: 1.4; }
+.psychology-line { margin: -3px 0 8px; color: #819a91; font-size: 8px; text-transform: uppercase; letter-spacing: .055em; }
 .energy-row { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
 .energy-track { flex: 1; height: 3px; overflow: hidden; border-radius: 9px; background: rgba(255,255,255,.09); }
 .energy-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #73b990, #c3e39d); }
@@ -143,6 +144,13 @@ h2 { margin-top: 3px; font-size: 17px; font-weight: 650; }
 .phase { height: 4px; border-radius: 4px; background: rgba(255,255,255,.1); }
 .phase.done { background: var(--amber); box-shadow: 0 0 10px rgba(237,187,115,.28); }
 .stakes { padding-top: 8px; border-top: 1px solid var(--line); color: #a4b4ae !important; }
+.episode-summary { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.episode-summary strong { color: #e8f2eb; font-size: 12px; font-weight: 630; }
+.episode-summary small { color: var(--muted); font-size: 9px; line-height: 1.4; }
+.world-systems { margin-top: 11px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+.system-meter { display: grid; gap: 3px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.025); }
+.system-meter span { color: #839c93; font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
+.system-meter b { color: #dcece2; font-size: 10px; font-weight: 590; }
 
 .event-console {
   position: fixed;
@@ -155,7 +163,7 @@ h2 { margin-top: 3px; font-size: 17px; font-weight: 650; }
   border-radius: 20px;
 }
 .event-console h2 { font-size: 14px; }
-.playback { display: flex; gap: 6px; }
+.playback { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .playback button, .playback select {
   color: #d9e8df;
   background: rgba(255,255,255,.06);
@@ -203,6 +211,9 @@ h2 { margin-top: 3px; font-size: 17px; font-weight: 650; }
 }
 @keyframes bubble { 0% { opacity: 0; transform: translate(-50%, -95%) scale(.92); } 10%, 78% { opacity: 1; transform: translate(-50%, -115%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -135%) scale(.97); } }
 .notice { position: fixed; z-index: 50; left: 50%; top: 94px; transform: translateX(-50%); padding: 10px 14px; border: 1px solid rgba(237,139,121,.32); border-radius: 10px; background: rgba(51,20,18,.9); color: #ffd9d0; font-size: 11px; }
+#vfx-flash { position: fixed; z-index: 40; inset: 0; pointer-events: none; opacity: 0; background: repeating-linear-gradient(0deg, rgba(114,239,239,.16) 0 2px, transparent 2px 7px); mix-blend-mode: screen; }
+#vfx-flash.active { animation: glitch-flash .65s steps(5) both; }
+@keyframes glitch-flash { 0%,100% { opacity: 0; transform: translateX(0); } 18% { opacity: .75; transform: translateX(7px); } 38% { opacity: .2; transform: translateX(-9px); } 62% { opacity: .58; transform: translateX(3px); } }
 .hidden { opacity: 0; pointer-events: none; transform: translateY(-8px); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
