@@ -74,6 +74,7 @@ class World:
         self.tick = 0
         self.time = world_time or WorldTime()
         self.weather = weather
+        self.living_world = None
         self._sequence = 0
         self._validate_initial_state()
 
@@ -198,6 +199,7 @@ class World:
             if is_pocket_world and character.location_id not in active_pocket_ids
             else None
         )
+        spatial = self.living_world.perception_for(character_id) if self.living_world else {}
         return Perception(
             tick=self.tick,
             location_id=location.id,
@@ -232,6 +234,10 @@ class World:
             active_adventures=known_adventures,
             is_pocket_world=is_pocket_world,
             homeward_exit_id=homeward_exit_id,
+            current_activity=str(spatial.get("activity", "observing")),
+            activity_phase=str(spatial.get("phase", "idle")),
+            available_activity_spots=tuple(spatial.get("available_spots", ())),
+            nearby_distances=dict(spatial.get("character_distances", {})),
         )
 
     def _next_exit_toward_hub(self, start_id: str, pocket_ids: set[str]) -> str | None:

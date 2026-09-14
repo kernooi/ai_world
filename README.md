@@ -1,7 +1,7 @@
 # Autonomous AI World
 
 A runnable, observer-only simulation implementing the project through
-**Stage 20 plus the daily adventure-world overhaul**. Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
+**Stage 21 plus the daily adventure-world overhaul**. Pomni, Ragatha, Jax, Gangle, Kinger, and Zooble
 independently perceive a detailed digital circus,
 reason from private state through a deterministic mock AI provider, submit
 structured tool actions, experience authoritative consequences, remember events,
@@ -10,6 +10,14 @@ one validated challenge per world day without choosing character behavior. The l
 state is presented as a procedural 3D world in a normal web browser.
 
 No API key, database server, Unreal Engine, 3D models, or manual scene setup is required.
+
+Pomni now uses a bundled sculpted, rigged fan model by MengGe_KKD, with painted
+textures and idle, walk, talk and reach animations. It loads automatically; the
+other five cast members still use procedural models. See the in-app Character
+credits or [asset credits](src/autonomous_ai_world/web/assets/CREDITS.md).
+**The imported Pomni asset is licensed CC BY-NC 4.0 (noncommercial use with attribution).**
+Its terms are separate from the code. The browser-ready model is included; Blender
+is only needed to regenerate it using `scripts/convert_pomni.py`.
 
 ## Run
 
@@ -227,6 +235,18 @@ models, textures, audio, scripts, or other production assets from the show.
 - Episodes close on resolution or day boundaries and persist in a durable world chronicle
 - Major consequences remain available independently of the short live event feed
 
+### Stage 21 - Living world and spatial agency
+
+- Persistent server-owned local positions, destinations, and walking/acting phases
+- Named activity spots with capacities and verbs throughout the circus hub
+- Multi-step physical routines for socializing, inspecting, searching, resting,
+  using props, performing, and arriving from travel
+- Busy characters finish their visible routine before requesting another decision
+- Generated pocket worlds automatically receive quest and gathering affordances
+- Activity state, nearby distances, and available spots ground future AI context
+- Observer cards show the live routine while occupied spots pulse in the 3D world
+- Spatial positions and unfinished routines survive save and restore
+
 ### Daily adventure-world overhaul
 
 - Caine is the primary orchestration AI and announces a complete adventure every world day
@@ -291,6 +311,7 @@ silently making network calls.
 - `memory.py` - tiered storage and relevance retrieval
 - `relationships.py` - deterministic event-driven social projection
 - `world_systems.py` - circus cycles, resources, NPC population, and shared pressures
+- `living_world.py` - persistent positions, activity affordances, and physical routines
 - `episodes.py` - emergent episode assembly and persistent consequence chronicle
 - `director.py` - summarized observation and cooldown interventions
 - `adventures.py` - data-driven premises and event-triggered phase matching
@@ -310,6 +331,9 @@ camera direction, and advanced story pacing, and
 world systems, psychology, presentation, and episodes, and
 [docs/ADVENTURE_WORLD_OVERHAUL.md](docs/ADVENTURE_WORLD_OVERHAUL.md) for Caine's daily
 quest generator, expanded hub, and free-steering presentation.
+
+See [docs/STAGE_21_LIVING_WORLD.md](docs/STAGE_21_LIVING_WORLD.md) for authoritative
+spatial state, activity spots, persistent routines, and the remaining reach boundary.
 
 See [the visual overhaul notes](docs/VISUAL_OVERHAUL.md) for the detailed cast,
 rebuilt scenery, free-floor navigation, camera controls, and current boundaries.

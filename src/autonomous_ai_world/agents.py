@@ -480,4 +480,8 @@ class CharacterAgent:
             "active_adventures": [dict(item) for item in perception.active_adventures],
             "is_pocket_world": perception.is_pocket_world,
             "homeward_exit_id": perception.homeward_exit_id,
+            "current_activity": perception.current_activity,
+            "activity_phase": perception.activity_phase,
+            "available_activity_spots": list(perception.available_activity_spots),
+            "nearby_distances": dict(perception.nearby_distances),
         }

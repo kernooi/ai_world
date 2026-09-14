@@ -20,7 +20,7 @@ def test_stage_16_persists_complete_world_and_recovers_backup(tmp_path) -> None:
     simulation.save(repository)
     restored = Simulation.load(repository, seed=16)
 
-    assert restored.to_dict()["version"] == 3
+    assert restored.to_dict()["version"] == 4
     assert restored.systems.to_dict() == simulation.systems.to_dict()
     assert restored.episodes.to_dict() == simulation.episodes.to_dict()
     assert restored.world.characters["pomni"].psychology == simulation.world.characters["pomni"].psychology

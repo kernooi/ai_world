@@ -13,6 +13,7 @@ from autonomous_ai_world.config import Settings
 from autonomous_ai_world.director import CIRCUS_SITUATIONS, DEFAULT_SITUATIONS, DirectorAgent
 from autonomous_ai_world.episodes import EpisodeManager
 from autonomous_ai_world.memory import MemoryManager
+from autonomous_ai_world.living_world import LivingWorld
 from autonomous_ai_world.models import (
     Action,
     ActionKind,
@@ -55,6 +56,7 @@ class Simulation:
         adventures: AdventureManager | None = None,
         systems: CircusSystems | None = None,
         episodes: EpisodeManager | None = None,
+        living_world: LivingWorld | None = None,
     ) -> None:
         agent_ids = {agent.character_id for agent in agents}
         if agent_ids != set(world.characters) or len(agents) != len(agent_ids):
@@ -70,6 +72,11 @@ class Simulation:
             self.adventures.bind(world)
         self.systems = systems or CircusSystems()
         self.episodes = episodes or EpisodeManager(current_day=world.time.day)
+        circus_cast = {"pomni", "ragatha", "jax", "gangle", "kinger", "zooble"}
+        self.living_world = living_world or LivingWorld(
+            world, enabled=circus_cast.issubset(world.characters)
+        )
+        self.world.living_world = self.living_world
         self.world.events.subscribe(self.systems.observe)
         self.world.events.subscribe(self.episodes.observe)
 
@@ -80,6 +87,7 @@ class Simulation:
         self.episodes.maintain(self.world.time.day, self.world.tick)
         self.systems.advance(self.world.time.day, self.world.time.minute, self.world.tick)
         self._apply_world_pressure()
+        self.living_world.advance(self.world)
         await self.director.update_async(self.world)
         decisions = await asyncio.gather(
             *(
@@ -89,6 +97,7 @@ class Simulation:
                     self.memory.store_for(agent.character_id),
                 )
                 for agent in self.agents
+                if not self.living_world.is_busy(agent.character_id)
             )
         )
         # Social/inspection actions resolve before travel, reducing snapshot races while
@@ -107,8 +116,12 @@ class Simulation:
             ActionKind.SLEEP: 3,
             ActionKind.MOVE: 4,
         }
+        accepted_actions: list[Action] = []
         for decision in sorted(decisions, key=lambda item: order[item.action.kind]):
-            self.world.execute(decision.action)
+            result = self.world.execute(decision.action)
+            if result.accepted:
+                accepted_actions.append(decision.action)
+        self.living_world.queue_actions(accepted_actions, self.world)
         return self.world.events.history[start:]
 
     def _apply_world_pressure(self) -> None:
@@ -296,7 +309,7 @@ class Simulation:
             self.world.characters
         )
         return {
-            "version": 3,
+            "version": 4,
             "scenario": "digital_circus" if is_circus else "classic_world",
             "world": {
                 "tick": self.world.tick,
@@ -354,6 +367,7 @@ class Simulation:
                 "created": self.director._created,
             },
             "adventures_enabled": self.adventures is not None,
+            "living_world": self.living_world.to_dict(),
         }
 
     @classmethod
@@ -493,6 +507,9 @@ class Simulation:
         memory = MemoryManager.from_dict(data.get("memory", {}))
         systems = CircusSystems.from_dict(data.get("systems"))
         episodes = EpisodeManager.from_dict(data.get("chronicle"))
+        living_world = LivingWorld.from_dict(
+            world, data.get("living_world"), enabled=is_circus
+        )
         simulation = cls(
             world,
             agents,
@@ -501,6 +518,7 @@ class Simulation:
             adventure_manager,
             systems=systems,
             episodes=episodes,
+            living_world=living_world,
         )
         for agent in agents:
             agent._inspected = {

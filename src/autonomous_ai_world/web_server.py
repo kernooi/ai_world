@@ -249,7 +249,7 @@ def create_app(config: WebRuntimeConfig | None = None) -> FastAPI:
             await runner.stop()
             await connections.stop_heartbeat()
 
-    app = FastAPI(title="The Autonomous Digital Circus", version="0.21.0", lifespan=lifespan)
+    app = FastAPI(title="The Autonomous Digital Circus", version="0.22.0", lifespan=lifespan)
     app.state.runner = runner
 
     @app.get("/api/health")

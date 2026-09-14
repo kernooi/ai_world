@@ -9,6 +9,9 @@ const CircusArt = {
     // remain separate so their joints and expressions can animate.
     const groups=new Map();
     for(const mesh of root.getChildMeshes()) {
+      let ancestor=mesh.parent,dynamic=false;
+      while(ancestor&&ancestor!==root){if(ancestor.metadata?.dynamic){dynamic=true;break;}ancestor=ancestor.parent;}
+      if(dynamic||mesh.metadata?.dynamic)continue;
       const key=mesh.material.uniqueId;
       if(!groups.has(key))groups.set(key,[]);
       groups.get(key).push(mesh);mesh.computeWorldMatrix(true);
@@ -147,28 +150,30 @@ const CircusArt = {
     if(id!=="jax"&&id!=="ragatha")this.ball("mouth",mouth,[0,0,0],[.25,.075,.04],ink);
     for(const side of [-1,1])brows.push(this.tube("eyebrow",head,[[side*.15,.48,-.43],[side*.3,.51,-.48],[side*.44,.46,-.4]],.018,ink));
     const location=worldView.locations.get(character.location_id),offset=new BABYLON.Vector3(Math.cos(index*2.4)*3.4,0,Math.sin(index*2.4)*3.4);
+    if(character.spatial?.position)offset.set(character.spatial.position.x,0,character.spatial.position.z);
     const at=(location?.root.position||BABYLON.Vector3.Zero()).add(offset);
     const group=location?.location.adventure_id||"hub",safe=worldView.navigation.nearest(at,group);
     root.position=new BABYLON.Vector3(safe?.x??at.x,0,safe?.z??at.z);root.rotation.y=Math.PI;
     worldView.characters.set(id,{root,body,head,leftArm,rightArm,leftLeg,rightLeg,knees,feet,ears,eyes,brows,mouth,heads:[head],
       color:CHARACTER_COLORS[id],locationId:character.location_id,offset,movement:null,expression:"curiosity",stepPhase:index,
       movingUntil:0,talkingUntil:0,gestureUntil:0,gesture:"",idleUntil:performance.now()+2500+index*700,portalToken:0,
-      height:id==="jax"?6.8:5,group,speed:id==="kinger"?2.7:id==="jax"?4.8:3.7});
+      height:id==="jax"?6.8:5,group,speed:id==="kinger"?2.7:id==="jax"?4.8:3.7,
+      activity:character.spatial?.activity||"observing",activityPhase:character.spatial?.phase||"idle",activityPlan:character.spatial?.plan||[]});
   },
   animate(view,now,dt,speed) {
     const blend=1-Math.exp(-dt*9),walk=Math.min(1,speed/3),phase=view.stepPhase;
-    const talk=now<view.talkingUntil,gesture=now<view.gestureUntil?view.gesture:"";
+    const talk=now<view.talkingUntil||view.activity==="talk"||view.activity==="lie",gesture=now<view.gestureUntil?view.gesture:view.activity;
     const ease=(obj,key,value)=>obj[key]+=(value-obj[key])*blend;
     const stride=Math.sin(phase)*.48*walk;
     ease(view.leftLeg.rotation,"x",stride);ease(view.rightLeg.rotation,"x",-stride);
     view.knees.forEach((k,i)=>ease(k.rotation,"x",Math.max(0,Math.sin(phase+i*Math.PI))*.65*walk));
     ease(view.leftArm.rotation,"x",-stride*.72);ease(view.rightArm.rotation,"x",stride*.72);
-    const reach=["helped","item_used","item_picked_up","inspected","searched"].includes(gesture);
+    const reach=["helped","help","item_used","item_picked_up","inspected","inspecting","searched","searching","collecting","using","placing"].includes(gesture);
     ease(view.rightArm.rotation,"x",reach?-.85:talk?-.3:-stride*.72);
     ease(view.rightArm.rotation,"z",talk?-.3+Math.sin(now*.006)*.14:0);
     ease(view.leftArm.rotation,"z",view.expression==="fear"?.28:0);
-    ease(view.body.rotation,"z",gesture==="slept"?.18:Math.sin(phase)*.015*walk);
-    ease(view.body.rotation,"x",gesture==="searched"||gesture==="item_picked_up"?.18:0);
+    ease(view.body.rotation,"z",["slept","sleeping","resting"].includes(gesture)?.18:Math.sin(phase)*.015*walk);
+    ease(view.body.rotation,"x",["searched","searching","collecting","item_picked_up"].includes(gesture)?.18:0);
     const eyeTarget=(view.expression==="fear"?1.14:view.expression==="anger"?.65:1)*(now%(3300+view.root.uniqueId*11)<125?.09:1);
     view.eyes.forEach(eye=>ease(eye.scaling,"y",eyeTarget));
     const headTilt=view.expression==="curiosity"?.08:0,browAngle=view.expression==="anger"?.16:0,armPosture=view.expression==="fear"?.2:0;
@@ -284,6 +289,7 @@ const CircusArt = {
     } else if(id==="rides_promenade"||id==="moon_carnival") {
       this.tube("wheel-support",root,[[-4,0,5],[0,9,5],[4,0,5]],.32,cream);
       const wheel=this.pivot("ferris-wheel",root,[0,9,5]);
+      wheel.metadata={dynamic:true};worldView.animatedProps.push({node:wheel,kind:"wheel"});
       this.mesh("CreateTorus","wheel-rim",wheel,{diameter:14,thickness:.22,tessellation:72},[0,0,0],gold).rotation.x=Math.PI/2;
       for(let i=0;i<12;i++){const a=i/12*Math.PI*2;this.tube("wheel-spoke",wheel,[[0,0,0],[Math.cos(a)*7,Math.sin(a)*7,0]],.07,cream);this.ball("gondola",wheel,[Math.cos(a)*7,Math.sin(a)*7,-.1],[1.15,1.3,1.1],i%2?red:blue);}
       this.obstacle(root,0,5,10,4);
@@ -298,7 +304,7 @@ const CircusArt = {
       this.text("theater-sign",root,[0,8,4.2],"THE GRAND THEATER",14,1.6);
     } else if(id==="portal_gallery"||id==="adventure_portal"||id==="mirror_maze") {
       const count=id==="portal_gallery"?5:1;
-      for(let i=0;i<count;i++){const x=(i-(count-1)/2)*4.6;for(let j=0;j<3;j++){const ring=this.mesh("CreateTorus","portal-frame",root,{diameter:4.4-j*.32,thickness:.18,tessellation:64},[x,3.1,3],j%2?gold:"#885fe3");ring.rotation.x=Math.PI/2;worldView.portalRings.push(ring);}this.ball("portal-surface",root,[x,3.1,3.1],[3.6,4.4,.1],"#342061");this.obstacle(root,x,3,4,.3);}
+      for(let i=0;i<count;i++){const x=(i-(count-1)/2)*4.6;for(let j=0;j<3;j++){const ring=this.mesh("CreateTorus","portal-frame",root,{diameter:4.4-j*.32,thickness:.18,tessellation:64},[x,3.1,3],j%2?gold:"#885fe3");ring.rotation.x=Math.PI/2;ring.metadata={dynamic:true};worldView.portalRings.push(ring);}this.ball("portal-surface",root,[x,3.1,3.1],[3.6,4.4,.1],"#342061");this.obstacle(root,x,3,4,.3);}
       this.text("portal-title",root,[0,6,3],id==="mirror_maze"?"THE MIRROR MAZE":"WHERE SHALL WE GO TODAY?",15,1.2);
     } else if(id==="void_overlook") {
       for(let i=0;i<10;i++){this.lathe("fence-post",root,[-9+i*2,0,5],[[.12,0],[.12,1.7],[.2,1.8]],cream);}

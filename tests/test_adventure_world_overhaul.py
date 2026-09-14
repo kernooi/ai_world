@@ -33,7 +33,9 @@ def test_caine_announcement_reaches_cast_and_objectives_are_completed_by_charact
     adventure = next(iter(simulation.world.adventures.values()))
 
     assert all(f"adventure:{adventure.id}" in character.knowledge for character in simulation.world.characters.values())
-    simulation.run(20)
+    # Spatial routines let the cast visibly approach and perform each action,
+    # so a complete five-phase adventure intentionally takes longer.
+    simulation.run(40)
     assert adventure.status is AdventureStatus.RESOLVED
     assert all(objective.status == "complete" for objective in adventure.objectives)
     assert all(objective.completed_by in simulation.world.characters for objective in adventure.objectives)

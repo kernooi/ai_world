@@ -56,6 +56,7 @@ const VOICE_PROFILES = {
 };
 const worldView = { engine: null, scene: null, camera: null, sun: null, state: null, socket: null,
   navigation: new FreeNavigation(), paused: false, locations: new Map(), characters: new Map(), objects: new Map(), paths: new Set(), reconnects: 0,
+  activitySpots: new Map(), animatedProps: [],
   rain: null, locationIndex: 0, sessionId: null, lastMessageId: 0, lastSeenAt: 0,
   gloinks: [], showLights: [], portalRings: [], renderPaused: false };
 const voiceState = {
@@ -258,7 +259,14 @@ function syncPaths(locations) {
   // Connectivity is semantic; no prescribed tracks are drawn.
 }
 
-function createCharacter(character, index) { CircusArt.character(character, index); }
+function createCharacter(character, index) {
+  CircusArt.character(character, index);
+  if(character.id === "pomni") ImportedCharacters.loadPomni(worldView.characters.get(character.id));
+}
+
+function spatialPoint(location, point) {
+  return {x:location.root.position.x+Number(point?.x||0),z:location.root.position.z+Number(point?.z||0)};
+}
 
 function navigationTarget(view, location) {
   const group=location.location.adventure_id||"hub";
@@ -270,13 +278,22 @@ function navigationTarget(view, location) {
   return worldView.navigation.nearest(location.root.position,group);
 }
 
-function moveCharacter(view, locationId) {
+function moveCharacter(view, locationId, spatial=null) {
   const location=worldView.locations.get(locationId);if(!location)return;
-  const group=location.location.adventure_id||"hub",target=navigationTarget(view,location);if(!target)return;
+  const group=location.location.adventure_id||"hub";
+  const requested=spatial?.target?spatialPoint(location,spatial.target):navigationTarget(view,location);
+  const target=requested&&worldView.navigation.nearest(requested,group);if(!target)return;
   const token=++view.portalToken;
   if(group!==view.group){
     view.movement=null;view.portalUntil=performance.now()+850;
-    window.setTimeout(()=>{if(token!==view.portalToken)return;view.root.position.set(target.x,0,target.z);view.group=group;},400);
+    window.setTimeout(()=>{
+      if(token!==view.portalToken)return;
+      const reported=spatial?.position?spatialPoint(location,spatial.position):target;
+      const entry=worldView.navigation.nearest(reported,group)||target;
+      view.root.position.set(entry.x,0,entry.z);view.group=group;
+      const path=worldView.navigation.route(view.root.position,target,group);
+      view.movement=path.length?{path,index:1,velocity:BABYLON.Vector3.Zero(),blocked:0}:null;
+    },400);
     glitchFlash();
   } else {
     view.portalUntil=0;
@@ -286,12 +303,27 @@ function moveCharacter(view, locationId) {
   view.locationId=locationId;view.idleUntil=performance.now()+5000+Math.random()*5000;
 }
 
+function syncSpatialCharacter(view,character) {
+  const spatial=character.spatial;if(!spatial)return;
+  view.spatialControlled=true;
+  view.activity=spatial.activity;view.activityPhase=spatial.phase;view.activityPlan=spatial.plan||[];view.activityTargetId=spatial.target_id;
+  const target=spatial.target||spatial.position;
+  const key=`${spatial.location_id}:${spatial.revision}:${Number(target.x).toFixed(2)}:${Number(target.z).toFixed(2)}`;
+  if(view.spatialKey!==key){view.spatialKey=key;moveCharacter(view,character.location_id,spatial);}
+}
+
 function updateCharacterSteering(view, deltaSeconds) {
   const now=performance.now();
   if(view.portalUntil>now){const t=1-(view.portalUntil-now)/850;view.root.scaling.setAll(Math.max(.06,Math.abs(t*2-1)));return 0;}
   view.root.scaling.setAll(1);
   if(!view.movement){
-    if(now>view.idleUntil&&now>view.gestureUntil&&!worldView.paused&&now>view.talkingUntil)moveCharacter(view,view.locationId);
+    const partner=view.activityTargetId&&worldView.characters.get(view.activityTargetId);
+    if(partner&&partner.group===view.group){
+      const dx=partner.root.position.x-view.root.position.x,dz=partner.root.position.z-view.root.position.z;
+      const facing=Math.atan2(-dx,-dz),turn=Math.atan2(Math.sin(facing-view.root.rotation.y),Math.cos(facing-view.root.rotation.y));
+      view.root.rotation.y+=turn*(1-Math.exp(-deltaSeconds*6));
+    }
+    if(!view.spatialControlled&&now>view.idleUntil&&now>view.gestureUntil&&!worldView.paused&&now>view.talkingUntil)moveCharacter(view,view.locationId);
     return 0;
   }
   if(worldView.paused)return 0;
@@ -365,12 +397,36 @@ function syncGloinks(population) {
   while (worldView.gloinks.length > visibleCount) worldView.gloinks.pop().dispose();
   while (worldView.gloinks.length < visibleCount) {
     const index = worldView.gloinks.length;
-    const gloink = BABYLON.MeshBuilder.CreatePolyhedron(`gloink-${index}`, { type: 2, size: .48 }, worldView.scene);
-    gloink.material = material(`gloink-mat-${index}`, index % 2 ? "#65dce1" : "#e8d04c", .28);
+    const gloink = new BABYLON.TransformNode(`gloink-${index}`,worldView.scene);
+    const body = BABYLON.MeshBuilder.CreatePolyhedron(`gloink-body-${index}`, { type: 2, size: .55 }, worldView.scene);
+    body.parent=gloink;body.material = material(`gloink-mat-${index}`, index % 2 ? "#65dce1" : "#e8d04c", .28);
+    for(const side of [-1,1]){
+      const eye=BABYLON.MeshBuilder.CreateSphere(`gloink-eye-${index}-${side}`,{diameter:.18,segments:8},worldView.scene);
+      eye.parent=gloink;eye.position.set(side*.17,.15,-.43);eye.material=material(`gloink-eye-mat-${index}-${side}`,"#fff4cf",.4);
+      const foot=BABYLON.MeshBuilder.CreateSphere(`gloink-foot-${index}-${side}`,{diameter:.2,segments:8},worldView.scene);
+      foot.parent=gloink;foot.position.set(side*.28,-.47,0);foot.material=material(`gloink-foot-mat-${index}-${side}`,"#482654",.5);
+    }
     gloink.metadata = { home: new BABYLON.Vector3(-5 + (index%6)*1.8, .62, 12 + Math.floor(index/6)*1.8), phase: index * .83 };
     gloink.position.copyFrom(gloink.metadata.home);
-    worldView.shadow.addShadowCaster(gloink);
+    worldView.shadow.addShadowCaster(body);
     worldView.gloinks.push(gloink);
+  }
+}
+
+function syncActivitySpots(living) {
+  for(const spot of living?.activity_spots||[]){
+    let view=worldView.activitySpots.get(spot.id);
+    if(!view){
+      const location=worldView.locations.get(spot.location_id);if(!location)continue;
+      const root=new BABYLON.TransformNode(`activity-${spot.id}`,worldView.scene);
+      root.position.set(location.root.position.x+spot.x,.08,location.root.position.z+spot.z);
+      const ring=BABYLON.MeshBuilder.CreateTorus(`activity-ring-${spot.id}`,{diameter:1.25,thickness:.045,tessellation:24},worldView.scene);
+      ring.parent=root;ring.material=CircusArt.mat(spot.kind==="danger"?"#ef4965":spot.kind==="rest"?"#6bd6bc":"#ffd05b",.4,.35);
+      const orb=BABYLON.MeshBuilder.CreateSphere(`activity-orb-${spot.id}`,{diameter:.13,segments:8},worldView.scene);
+      orb.parent=root;orb.position.y=.12;orb.material=ring.material;
+      view={root,ring,orb,occupied:0,phase:Math.random()*6.28};worldView.activitySpots.set(spot.id,view);
+    }
+    view.occupied=Number(spot.occupied)||0;
   }
 }
 
@@ -390,11 +446,13 @@ function applyState(state) {
   state.characters.forEach((character, index) => {
     if (!worldView.characters.has(character.id)) createCharacter(character, index);
     const view = worldView.characters.get(character.id);
-    if (view.locationId !== character.location_id) moveCharacter(view, character.location_id);
+    if(character.spatial)syncSpatialCharacter(view,character);
+    else if (view.locationId !== character.location_id) moveCharacter(view, character.location_id);
     view.expression = character.dominant_emotion || "curiosity";
   });
   syncObjects(state.objects || []);
   syncGloinks(state.systems?.gloink_population || 0);
+  syncActivitySpots(state.living_world);
   updateSystemLighting(state.systems);
   updateWeather(state.weather, state.time.is_night);
   renderDashboard(state);
@@ -420,7 +478,8 @@ function animateWorld() {
   for(const view of worldView.characters.values()){
     const speed=updateCharacterSteering(view,deltaSeconds);
     view.stepPhase+=speed*deltaSeconds*2.4;
-    CircusArt.animate(view,now,deltaSeconds,speed);
+    if(view.importedModel) ImportedCharacters.animate(view,now,deltaSeconds,speed);
+    else CircusArt.animate(view,now,deltaSeconds,speed);
   }
   for (const object of worldView.objects.values()) object.mesh.rotation.y += .008;
   worldView.gloinks.forEach((gloink, index) => {
@@ -431,6 +490,11 @@ function animateWorld() {
     gloink.rotation.y += .018 + index * .0002;
   });
   worldView.portalRings.forEach((ring, index) => { ring.rotation.z += (index % 2 ? -.004 : .004) * (index + 1); });
+  worldView.animatedProps.forEach(prop=>{if(prop.kind==="wheel")prop.node.rotation.z-=deltaSeconds*.22;else prop.node.rotation.y+=deltaSeconds*.25;});
+  worldView.activitySpots.forEach(view=>{
+    const pulse=1+Math.sin(now*.003+view.phase)*.12;
+    view.root.scaling.setAll(view.occupied?pulse:1);view.root.setEnabled(view.occupied>0);
+  });
   worldView.showLights.forEach((light, index) => { light.direction.x = Math.sin(now*.00035 + index*2) * .35; });
   if (now - performanceState.lastCheck > 3000 && worldView.engine) {
     const fps = worldView.engine.getFps();
@@ -503,7 +567,10 @@ function renderDashboard(state) {
     const identity = node("div"); identity.appendChild(node("span", "character-name", character.name));
     identity.appendChild(node("span", "character-place", locationNames.get(character.location_id) || character.location_id));
     top.appendChild(identity); top.appendChild(node("span", "emotion", character.dominant_emotion)); card.appendChild(top);
-    card.appendChild(node("p", "intention", character.intention ? character.intention.description : character.goal || "Observing the world"));
+    const spatial=character.spatial;
+    const activeStep=spatial?.plan?.find(step=>step.status==="active")?.label;
+    card.appendChild(node("p", "activity-line", `${spatial?.phase||"thinking"} · ${(spatial?.activity||"observing").replaceAll("_"," ")}`));
+    card.appendChild(node("p", "intention", activeStep || (character.intention ? character.intention.description : character.goal || "Observing the world")));
     if (character.psychology) {
       const mind = node("p", "psychology-line", `${Math.round(character.psychology.reputation*100)}% reputation${character.psychology.strongest_habit ? ` · habit: ${character.psychology.strongest_habit}` : ""}`);
       mind.title = `${character.psychology.identity}\nAmbition: ${character.psychology.ambition}`;

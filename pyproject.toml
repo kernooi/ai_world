@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autonomous-ai-world"
-version = "0.21.0"
+version = "0.22.0"
 description = "A persistent autonomous digital circus with Caine-generated daily quest worlds"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,7 +22,7 @@ ai-world = "autonomous_ai_world.cli:main"
 ai-world-web = "autonomous_ai_world.web_server:main"
 
 [tool.setuptools.package-data]
-autonomous_ai_world = ["web/*.html", "web/*.css", "web/*.js"]
+autonomous_ai_world = ["web/*.html", "web/*.css", "web/*.js", "web/assets/*.glb", "web/assets/*.md"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

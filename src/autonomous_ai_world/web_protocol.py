@@ -36,6 +36,7 @@ def event_payload(event: Event) -> dict[str, Any]:
 def world_snapshot(simulation: Simulation, *, event_limit: int = 80) -> dict[str, Any]:
     """Build the public observer view; private memories and hidden objects stay server-side."""
     world = simulation.world
+    living = simulation.living_world.public_state()
     pocket_location_meta: dict[str, dict[str, Any]] = {}
     for world_number, adventure in enumerate(world.adventures.values(), start=1):
         for zone_index, location_id in enumerate(adventure.generated_location_ids):
@@ -90,6 +91,7 @@ def world_snapshot(simulation: Simulation, *, event_limit: int = 80) -> dict[str
                     else None
                 ),
                 "inventory": list(character.inventory),
+                "spatial": living["characters"].get(character.id),
             }
         )
 
@@ -113,6 +115,7 @@ def world_snapshot(simulation: Simulation, *, event_limit: int = 80) -> dict[str
         "systems": simulation.systems.to_dict(),
         "episodes": [episode.to_dict() for episode in simulation.episodes.episodes[-12:]],
         "major_consequences": [dict(item) for item in simulation.episodes.major_consequences[-20:]],
+        "living_world": living,
         "locations": [
             {
                 "id": location.id,

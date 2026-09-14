@@ -418,6 +418,10 @@ class Perception:
     active_adventures: tuple[Mapping[str, str], ...] = ()
     is_pocket_world: bool = False
     homeward_exit_id: str | None = None
+    current_activity: str = "observing"
+    activity_phase: str = "idle"
+    available_activity_spots: tuple[str, ...] = ()
+    nearby_distances: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "features", MappingProxyType(dict(self.features)))
@@ -425,6 +429,7 @@ class Perception:
         object.__setattr__(self, "nearby_energy", MappingProxyType(dict(self.nearby_energy)))
         object.__setattr__(self, "inventory_tags", MappingProxyType(dict(self.inventory_tags)))
         object.__setattr__(self, "inventory_uses", MappingProxyType(dict(self.inventory_uses)))
+        object.__setattr__(self, "nearby_distances", MappingProxyType(dict(self.nearby_distances)))
         object.__setattr__(
             self,
             "active_adventures",
