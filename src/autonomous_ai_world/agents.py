@@ -199,6 +199,8 @@ class CharacterAgent:
             score += 0.5 if prompted else 0.0
             if any(adventure.get("objective_target_id") == feature_id for adventure in perception.active_adventures):
                 score += 1.0
+            if any(adventure.get('story_target_id') == feature_id for adventure in perception.active_adventures):
+                score += 4.0
             score -= character.emotions.fear * (0.2 + perception.location_danger)
             add(
                 ActionKind.INSPECT,
@@ -319,6 +321,8 @@ class CharacterAgent:
                     move_score += 0.45 + (p.curiosity + p.bravery) * 0.25
                 if adventure.get("generated_world") == "yes" and adventure.get("next_location_id") == destination:
                     move_score += 0.72 + p.bravery * 0.18
+                    if adventure.get('story_location_id'):
+                        move_score += 2.0
             if perception.homeward_exit_id == destination:
                 move_score += 0.9
             add(

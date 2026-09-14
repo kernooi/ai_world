@@ -335,6 +335,7 @@ class Adventure:
     event_sequences: list[int] = field(default_factory=list)
     resolved_by: str | None = None
     outcome: str | None = None
+    story: dict = field(default_factory=dict)
 
 
 @dataclass(slots=True)

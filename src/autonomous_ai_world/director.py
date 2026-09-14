@@ -326,6 +326,9 @@ class DirectorAgent:
                 # Closing yesterday's portal is housekeeping. It does not consume
                 # today's promise of a new Caine-created quest world.
         summary = self.summarize(world)
+        if self.adventure_manager and self.adventure_manager.active and self.adventure_manager.active.story:
+            self.status = 'overseeing_adventure'
+            return None
         if not self._is_due(world):
             self.status = "cooldown"
             return None

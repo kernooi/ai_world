@@ -42,6 +42,7 @@ def world_snapshot(simulation: Simulation, *, event_limit: int = 80) -> dict[str
         for zone_index, location_id in enumerate(adventure.generated_location_ids):
             pocket_location_meta[location_id] = {
                 "world_theme": adventure.world_theme,
+                "story": adventure.story,
                 "pocket_world_number": world_number,
                 "zone_index": zone_index,
                 "adventure_id": adventure.id,

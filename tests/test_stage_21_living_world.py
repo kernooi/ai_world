@@ -103,3 +103,38 @@ def test_browser_consumes_server_positions_instead_of_random_idle_wandering() ->
     assert "view.spatialControlled" in script
     assert "activityTargetId" in script
     assert "syncActivitySpots" in script
+
+
+def test_caine_periodically_checks_on_cast_without_a_fixed_route() -> None:
+    simulation = create_circus_simulation(seed=28, enable_adventures=False)
+    living = simulation.living_world
+    visited: list[str] = []
+    for _ in range(40):
+        simulation.step()
+        director = living.public_state()["director"]
+        if director["phase"] == "checking" and director["target_id"]:
+            if not visited or visited[-1] != director["target_id"]:
+                visited.append(director["target_id"])
+
+    assert len(set(visited)) >= 3
+    assert all(character_id in simulation.world.characters for character_id in visited)
+
+
+def test_caine_presence_survives_save_and_load() -> None:
+    simulation = create_circus_simulation(seed=29, enable_adventures=False)
+    simulation.run(9)
+    before = simulation.living_world.public_state()["director"]
+    repository = InMemoryStateRepository()
+    simulation.save(repository)
+
+    restored = Simulation.load(repository, seed=29)
+    assert restored.living_world.public_state()["director"] == before
+
+
+def test_browser_animates_caine_toward_server_checkups() -> None:
+    from pathlib import Path
+
+    script = (Path(__file__).parents[1] / "src" / "autonomous_ai_world" / "web" / "app.js").read_text(encoding="utf-8")
+    assert "syncCaine(state.living_world?.director)" in script
+    assert "CAINE_CHECK_LINES" in script
+    assert "animateCaine(now,deltaSeconds)" in script

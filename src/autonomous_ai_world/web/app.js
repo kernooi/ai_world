@@ -56,7 +56,7 @@ const VOICE_PROFILES = {
 };
 const worldView = { engine: null, scene: null, camera: null, sun: null, state: null, socket: null,
   navigation: new FreeNavigation(), paused: false, locations: new Map(), characters: new Map(), objects: new Map(), paths: new Set(), reconnects: 0,
-  activitySpots: new Map(), animatedProps: [],
+  activitySpots: new Map(), animatedProps: [], caine: null, caineModel: null, caineSpatial: null,
   rain: null, locationIndex: 0, sessionId: null, lastMessageId: 0, lastSeenAt: 0,
   gloinks: [], showLights: [], portalRings: [], renderPaused: false };
 const voiceState = {
@@ -195,7 +195,7 @@ function beamBetween(name, from, to, diameter, mat) {
   return beam;
 }
 
-function createCircusInterior() { CircusArt.environment(); }
+function createCircusInterior() { CircusArt.environment(); ImportedCharacters.loadCaine(); }
 
 function createCaine(position, dark, cream, gold, red) {
   const root = new BABYLON.TransformNode("director-caine", worldView.scene); root.position = position;
@@ -310,6 +310,47 @@ function syncSpatialCharacter(view,character) {
   const target=spatial.target||spatial.position;
   const key=`${spatial.location_id}:${spatial.revision}:${Number(target.x).toFixed(2)}:${Number(target.z).toFixed(2)}`;
   if(view.spatialKey!==key){view.spatialKey=key;moveCharacter(view,character.location_id,spatial);}
+}
+
+const CAINE_CHECK_LINES = [
+  target => `${target}! Your routine check-in has arrived. Continue being delightfully unpredictable!`,
+  target => `A quick wellness inspection, ${target}. Limbs accounted for, spirits measurable, excellent!`,
+  target => `${target}, your ringmaster is checking in. Any adventure-related existential inconveniences?`,
+  target => `Just making my rounds, ${target}! Everything sufficiently spectacular over here?`,
+  target => `${target}! This is a completely ordinary, non-invasive morale check. Smile if applicable!`,
+  target => `Status check, ${target}: present, active, and not abstracted. Splendid!`,
+];
+
+function syncCaine(spatial) {
+  if(!spatial||!worldView.caine)return;
+  const location=worldView.locations.get(spatial.location_id);if(!location)return;
+  const point=spatialPoint(location,spatial.position);
+  const prior=worldView.caineSpatial;
+  const changedRoom=prior&&prior.locationId!==spatial.location_id;
+  worldView.caineSpatial={
+    locationId:spatial.location_id,targetId:spatial.target_id,phase:spatial.phase,
+    destination:new BABYLON.Vector3(point.x,6,point.z),portalUntil:changedRoom?performance.now()+700:prior?.portalUntil||0,
+    talkingUntil:prior?.talkingUntil||0,lastCheckCount:prior?.lastCheckCount??-1,
+  };
+  if(!prior)worldView.caine.position.set(point.x,6,point.z);
+  if(changedRoom){
+    const token=spatial.revision;
+    worldView.caineSpatial.portalToken=token;
+    window.setTimeout(()=>{
+      if(worldView.caineSpatial?.portalToken!==token)return;
+      worldView.caine.position.copyFrom(worldView.caineSpatial.destination);
+    },350);
+    glitchFlash();
+  }
+  if(spatial.phase==='checking'&&worldView.caineSpatial.lastCheckCount!==spatial.check_count){
+    worldView.caineSpatial.lastCheckCount=spatial.check_count;
+    const person=worldView.state?.characters.find(item=>item.id===spatial.target_id);
+    if(person){
+      const line=CAINE_CHECK_LINES[spatial.check_count%CAINE_CHECK_LINES.length](person.name);
+      worldView.caineSpatial.talkingUntil=performance.now()+Math.max(2200,line.length*48);
+      showSpeech('caine',line);speak('caine',line);
+    }
+  }
 }
 
 function updateCharacterSteering(view, deltaSeconds) {
@@ -450,12 +491,14 @@ function applyState(state) {
     else if (view.locationId !== character.location_id) moveCharacter(view, character.location_id);
     view.expression = character.dominant_emotion || "curiosity";
   });
+  syncCaine(state.living_world?.director);
   syncObjects(state.objects || []);
   syncGloinks(state.systems?.gloink_population || 0);
   syncActivitySpots(state.living_world);
   updateSystemLighting(state.systems);
   updateWeather(state.weather, state.time.is_night);
   renderDashboard(state);
+  StoryPresentation.sync(state);
 }
 
 function updateWeather(weather, isNight) {
@@ -471,10 +514,8 @@ function updateWeather(weather, isNight) {
 function animateWorld() {
   const now = performance.now();
   const deltaSeconds = Math.min(.05, (worldView.engine?.getDeltaTime() || 16) / 1000);
-  if (worldView.caine) {
-    worldView.caine.position.y = 8.5 + Math.sin(now * .0017) * .45;
-    worldView.caine.rotation.y = Math.PI + Math.sin(now * .0007) * .12;
-  }
+  animateCaine(now,deltaSeconds);
+  StoryPresentation.animate(now,deltaSeconds);
   for(const view of worldView.characters.values()){
     const speed=updateCharacterSteering(view,deltaSeconds);
     view.stepPhase+=speed*deltaSeconds*2.4;
@@ -508,6 +549,39 @@ function animateWorld() {
   }
   updateCameraDirector(now);
   positionOverlays();
+}
+
+function animateCaine(now,deltaSeconds) {
+  const root=worldView.caine,state=worldView.caineSpatial;if(!root)return;
+  if(!state){root.position.y=6+Math.sin(now*.0017)*.16;return;}
+  const portal=state.portalUntil>now;
+  if(portal){
+    const t=1-(state.portalUntil-now)/700;
+    root.scaling.setAll(Math.max(.06,Math.abs(t*2-1)));
+    ImportedCharacters.animateCaine(now,deltaSeconds,false,false,false);return;
+  }
+  root.scaling.setAll(1);
+  const delta=state.destination.subtract(root.position);delta.y=0;
+  const distance=delta.length(),moving=!worldView.paused&&distance>.12;
+  if(moving){
+    const speed=Math.min(7,Math.max(1.8,distance*.9));
+    const step=Math.min(distance,speed*deltaSeconds);
+    const direction=delta.scale(1/Math.max(distance,.001));
+    root.position.addInPlace(direction.scale(step));
+    const facing=Math.atan2(-direction.x,-direction.z);
+    const turn=Math.atan2(Math.sin(facing-root.rotation.y),Math.cos(facing-root.rotation.y));
+    root.rotation.y+=turn*(1-Math.exp(-deltaSeconds*7));
+  }else if(state.targetId){
+    const target=worldView.characters.get(state.targetId)?.root;
+    if(target){
+      const look=target.position.subtract(root.position),facing=Math.atan2(-look.x,-look.z);
+      const turn=Math.atan2(Math.sin(facing-root.rotation.y),Math.cos(facing-root.rotation.y));
+      root.rotation.y+=turn*(1-Math.exp(-deltaSeconds*5));
+    }
+  }
+  root.position.y=6+Math.sin(now*.0017)*.16;
+  const talking=now<state.talkingUntil;
+  ImportedCharacters.animateCaine(now,deltaSeconds,moving,state.phase==='checking',talking);
 }
 
 function updateCameraDirector(now) {
@@ -586,6 +660,11 @@ function renderDashboard(state) {
 }
 
 function renderAdventure(adventures, episodes, systems) {
+  if(!document.getElementById('story-scene')){
+    const panel=node('div','story-scene');panel.id='story-scene';panel.hidden=true;
+    ui.adventurePanel.prepend(panel);
+  }
+  document.getElementById('story-scene').hidden=!adventures.some(a=>a.story?.title&&a.status==='active');
   const adventure = adventures.find(item => item.status === "active") || adventures[adventures.length - 1];
   const episode = episodes.find(item => item.status === "active") || episodes[episodes.length - 1];
   ui.adventurePanel.classList.remove("hidden");
@@ -690,6 +769,12 @@ function glitchFlash() {
 
 function animateEvents(events) {
   for (const event of events) {
+    if(event.data?.story_dialogue){
+      const speaker=event.data.speaker;
+      if(worldView.characters.has(event.actor_id)){showSpeech(event.actor_id,event.summary);speak(event.actor_id,event.summary);}
+      else if(speaker==='Caine'){showSpeech('caine',event.summary);speak('caine',event.summary);}
+      else showNotice(`${speaker}: ${event.summary}`);
+    }
     playEventSound(event.kind);
     if ((event.kind === "spoke" || event.kind === "lied") && event.actor_id) {
       const words = event.data.message || event.summary;

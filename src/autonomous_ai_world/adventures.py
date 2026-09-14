@@ -71,6 +71,22 @@ DEFAULT_ADVENTURES = (
 
 CIRCUS_ADVENTURES = (
     AdventureTemplate(
+        id='sugar_factory', title='Escape from the Sugarworks',
+        premise='Caine promises a royal tasting tour. A sugar worker named Pip begs the cast to rescue his friends instead.',
+        mystery='Why are the delivery cages locked, and what is the royal banquet really serving?',
+        stakes='Rescue the workers before the candy furnace collapses. Taking the easy exit may leave someone behind.',
+        hook_name='sugarworks_invitation', hook_description='Caine: Six VIP guests! A royal banquet, a charming factory tour, and absolutely no ingredient substitutions!',
+        clue_name='Pip’s smuggled delivery pass', clue_description='A worker has scratched HELP US into the golden delivery pass.',
+        hidden_location_id='candy_kingdom', escalation_name='sugar_furnace',
+        escalation_description='The furnace can only be stopped through coordinated rescue and repair work.',
+        world_theme='candy_factory', quest_objective='Rescue Pip’s workers, survive the foreman’s trap, and escape the collapsing Sugarworks.',
+        zones=(
+            PocketZoneTemplate('delivery_dock', 'Sugarworks Delivery Dock', 'Workers are trapped behind candy-bar cages beside Pip’s delivery truck.', .25),
+            PocketZoneTemplate('caramel_line', 'Boiling Caramel Line', 'A broken conveyor crosses a vat of molten caramel. The foreman watches from his office.', .45),
+            PocketZoneTemplate('royal_furnace', 'Royal Sugar Furnace', 'Pressure climbs inside a gigantic candy furnace. Emergency vents line the loading floor.', .65),
+        ),
+    ),
+    AdventureTemplate(
         id="glitching_midway",
         title="The Glitching Midway",
         premise="Caine unveils a cheerful midway game whose prizes have begun rewriting the tent.",
@@ -272,6 +288,8 @@ class AdventureManager:
             }
         )
         preferred_index = len(world.adventures) % len(available)
+        if not any(a.id.startswith('sugar_factory_') for a in world.adventures.values()):
+            preferred_index = next((i for i, t in enumerate(available) if t.id == 'sugar_factory'), preferred_index)
         candidates = [
             {
                 "template_id": template.id,
@@ -365,10 +383,14 @@ class AdventureManager:
                     actor_id=event.actor_id,
                     cause_event_sequence=event.sequence,
                 )
+                if adventure.id.startswith('sugar_factory_'):
+                    from autonomous_ai_world.story import begin_story
+                    begin_story(world, adventure)
             elif (
                 event.kind is EventKind.INSPECTED
                 and event.data.get("target_id") == adventure.escalation_feature_id
                 and adventure.phase is AdventurePhase.ESCALATION
+                and not adventure.id.startswith('sugar_factory_')
             ):
                 world.advance_adventure(
                     adventure.id,
@@ -376,11 +398,17 @@ class AdventureManager:
                     actor_id=event.actor_id,
                     cause_event_sequence=event.sequence,
                 )
+            if event.kind is EventKind.INSPECTED and adventure.story:
+                from autonomous_ai_world.story import record_interaction
+                record_interaction(world, adventure, event)
         except ValueError as exc:
             self.last_error = f"progression validation: {exc}"
 
     def maintain(self, world: World) -> Event | None:
         adventure = self.active
+        # Story scenes own their deadlines; midnight must not cut off a climax.
+        if adventure and adventure.story and not adventure.story.get('done'):
+            return None
         if adventure and world.time.day > adventure.created_day:
             return world.expire_adventure(
                 adventure.id,

@@ -56,6 +56,23 @@ class SpatialCharacter:
     queued_action: Action | None = None
 
 
+@dataclass(slots=True)
+class DirectorPresence:
+    """Caine's persistent physical presence, separate from character agency."""
+
+    location_id: str = "center_stage"
+    x: float = 0
+    z: float = 0
+    target_id: str | None = None
+    last_target_id: str | None = None
+    phase: str = "observing"
+    next_check_tick: int = 4
+    dwell: int = 0
+    revision: int = 0
+    check_count: int = 0
+    visited_ids: list[str] = field(default_factory=list)
+
+
 _SPOT_LAYOUTS: dict[str, tuple[tuple[str, str, str, float, float, int, tuple[str, ...]], ...]] = {
     "main_tent": (
         ("left_ring", "Left rehearsal ring", "performance", -13, 0, 3, ("rehearse", "perform")),
@@ -133,6 +150,7 @@ class LivingWorld:
         self.enabled = enabled
         self.spots: dict[str, ActivitySpot] = {}
         self.characters: dict[str, SpatialCharacter] = {}
+        self.director = DirectorPresence()
         self._refresh_spots(world)
         for index, character in enumerate(world.characters.values()):
             angle = index * 2.39996
@@ -222,6 +240,80 @@ class LivingWorld:
                     state.activity = "observing"
                     continue
             self._advance_character(world, state)
+        self._advance_director(world)
+
+    def _advance_director(self, world: World) -> None:
+        """Let Caine visit cast members without assigning him a fixed route."""
+        state = self.director
+        if not self.characters:
+            return
+        if state.target_id is None:
+            if world.tick < state.next_check_tick:
+                state.phase = "observing"
+                return
+            candidates = [item for item in sorted(self.characters) if item not in state.visited_ids]
+            if not candidates:
+                state.visited_ids = []
+                candidates = sorted(self.characters)
+            if len(candidates) > 1 and state.last_target_id in candidates:
+                candidates.remove(state.last_target_id)
+            # Deterministic but non-cyclic selection keeps save/load stable while
+            # avoiding a visible railroad patrol around the cast list.
+            pick = int(self._number(f"caine:{world.time.day}:{world.tick}:{state.check_count}", 0, 10000))
+            state.target_id = candidates[pick % len(candidates)]
+            state.phase = "traveling"
+            state.dwell = 2
+            state.revision += 1
+
+        target = self.characters.get(state.target_id)
+        if target is None:
+            state.target_id = None
+            state.next_check_tick = world.tick + 4
+            return
+        if target.location_id != state.location_id:
+            state.location_id = target.location_id
+            # Caine portals into the room at a visible distance, then flies the
+            # rest of the way instead of snapping directly onto the resident.
+            state.x = round(target.x - 6, 3)
+            state.z = round(target.z - 5, 3)
+            state.revision += 1
+
+        side = -1 if state.check_count % 2 else 1
+        destination_x, destination_z = target.x + side * 2.6, target.z - 2.4
+        dx, dz = destination_x - state.x, destination_z - state.z
+        distance = math.hypot(dx, dz)
+        already_checking = state.phase == "checking"
+        if distance > .25:
+            # Caine flies faster than the walking cast so a moving target cannot
+            # accidentally turn a check-up into an endless chase.
+            stride = min(5.6, distance)
+            state.x = round(state.x + dx / distance * stride, 3)
+            state.z = round(state.z + dz / distance * stride, 3)
+            state.phase = "checking" if already_checking else "traveling"
+            if already_checking:
+                if state.dwell > 0:
+                    state.dwell -= 1
+                else:
+                    self._finish_director_check(world, state)
+            return
+        state.x, state.z = round(destination_x, 3), round(destination_z, 3)
+        state.phase = "checking"
+        if state.dwell > 0:
+            state.dwell -= 1
+            return
+        self._finish_director_check(world, state)
+
+    @staticmethod
+    def _finish_director_check(world: World, state: DirectorPresence) -> None:
+        state.last_target_id = state.target_id
+        if state.target_id and state.target_id not in state.visited_ids:
+            state.visited_ids.append(state.target_id)
+        state.target_id = None
+        state.check_count += 1
+        # Roughly 12.5-20 seconds at the default web tick rate.
+        state.next_check_tick = world.tick + 4 + (state.check_count % 3)
+        state.phase = "observing"
+        state.revision += 1
 
     def _location_spots(self, location_id: str) -> list[ActivitySpot]:
         return [spot for spot in self.spots.values() if spot.location_id == location_id]
@@ -238,6 +330,11 @@ class LivingWorld:
     def _plan(self, world: World, state: SpatialCharacter, action: Action | None) -> list[RoutineStep]:
         kind = action.kind if action else None
         target_id = action.target_id if action else None
+        for adventure in world.adventures.values():
+            for target in adventure.story.get('targets', []):
+                if kind is ActionKind.INSPECT and target_id == target['id']:
+                    return [RoutineStep(target['label'], 'using', target['x'], target['z'],
+                                        duration=3, target_id=target_id)]
         if kind in {ActionKind.TALK, ActionKind.HELP, ActionKind.LIE} and target_id in self.characters:
             target = self.characters[target_id]
             return [
@@ -321,6 +418,15 @@ class LivingWorld:
                     occupied[spot_id] = occupied.get(spot_id, 0) + 1
         return {
             "enabled": self.enabled,
+            "director": {
+                "location_id": self.director.location_id,
+                "position": {"x": self.director.x, "z": self.director.z},
+                "target": {"x": self.director.x, "z": self.director.z},
+                "target_id": self.director.target_id,
+                "phase": self.director.phase,
+                "revision": self.director.revision,
+                "check_count": self.director.check_count,
+            },
             "activity_spots": [
                 {**asdict(spot), "verbs": list(spot.verbs), "occupied": occupied.get(spot.id, 0)}
                 for spot in self.spots.values()
@@ -356,6 +462,7 @@ class LivingWorld:
     def to_dict(self) -> dict[str, Any]:
         return {
             "enabled": self.enabled,
+            "director": asdict(self.director),
             "characters": {
                 character_id: {
                     "location_id": state.location_id, "x": state.x, "z": state.z,
@@ -370,6 +477,12 @@ class LivingWorld:
     @classmethod
     def from_dict(cls, world: World, raw: dict[str, Any] | None, *, enabled: bool = True) -> LivingWorld:
         living = cls(world, enabled=bool((raw or {}).get("enabled", enabled)))
+        director = (raw or {}).get("director", {})
+        if isinstance(director, dict):
+            defaults = asdict(living.director)
+            living.director = DirectorPresence(**{
+                key: director.get(key, value) for key, value in defaults.items()
+            })
         for character_id, item in (raw or {}).get("characters", {}).items():
             if character_id not in living.characters:
                 continue

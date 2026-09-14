@@ -88,6 +88,9 @@ class Simulation:
         self.systems.advance(self.world.time.day, self.world.time.minute, self.world.tick)
         self._apply_world_pressure()
         self.living_world.advance(self.world)
+        if self.adventures:
+            from autonomous_ai_world.story import advance_story
+            advance_story(self.world)
         await self.director.update_async(self.world)
         decisions = await asyncio.gather(
             *(
@@ -436,6 +439,7 @@ class Simulation:
                 event_sequences=list(raw.get("event_sequences", [])),
                 resolved_by=raw.get("resolved_by"),
                 outcome=raw.get("outcome"),
+                story=dict(raw.get("story", {})),
             )
             for raw in raw_world.get("adventures", [])
         ]

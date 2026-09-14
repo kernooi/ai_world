@@ -224,7 +224,7 @@ const CircusArt = {
     nav.addObstacle(-27,-15.5,8,5);nav.addObstacle(27,-15.5,8,5);
     this.tube("trapeze-left",root,[[-6,21,-3],[-6,12,-3]],.045,cream);this.tube("trapeze-right",root,[[0,21,-3],[0,12,-3]],.045,cream);this.tube("trapeze-bar",root,[[-6,12,-3],[0,12,-3]],.12,gold);
     // Caine has a complete ringmaster body and a tooth-lined jaw.
-    const caine=this.pivot("director-caine",null,[0,8.5,-18]),jaw=this.pivot("caine-jaw",caine);
+    const caine=this.pivot("director-caine",null,[0,6,-17]),jaw=this.pivot("caine-jaw",caine);
     this.ball("mouth-cavity",jaw,[0,0,0],[2.25,1.5,.65],"#371026");
     this.tube("upper-gum",jaw,[[-1,.1,0],[-.65,.66,0],[0,.78,0],[.65,.66,0],[1,.1,0]],.17,red);
     this.tube("lower-gum",jaw,[[-1,.1,0],[-.7,-.47,0],[0,-.62,0],[.7,-.47,0],[1,.1,0]],.17,red);
@@ -310,11 +310,12 @@ const CircusArt = {
       for(let i=0;i<10;i++){this.lathe("fence-post",root,[-9+i*2,0,5],[[.12,0],[.12,1.7],[.2,1.8]],cream);}
       this.tube("overlook-rail",root,[[-10,1.5,5],[10,1.5,5]],.08,gold);this.obstacle(root,0,5,20,.2);
     } else if(location.world_theme||id==="candy_kingdom") {
-      const theme=location.world_theme||"candy_kingdom";
+      const theme=location.world_theme==="candy_factory"?"candy_kingdom":location.world_theme||"candy_kingdom";
       const palette={glitch_midway:["#b93651",gold,blue],moon_funfair:["#322665","#8fcada","#c3c1ed"],candy_kingdom:["#ce7b9b",cream,"#a1dba7"],clockwork_sky:["#587b9b",gold,"#b5dddd"],storybook_sea:["#266da2",cream,red],neon_city:["#251944","#ea3cb0","#41c9d4"]}[theme];
       this.mesh("CreateCylinder","pocket-island",root,{diameter:28,height:.6,tessellation:64},[0,-.31,0],palette[0]);
       this.lathe("island-underside",root,[0,-5,0],[[0,0],[7,2],[14,4.6]],palette[0]);
       for(let i=0;i<7;i++) {
+        if(location.world_theme==='candy_factory')continue;
         const a=i/7*Math.PI*2,x=Math.cos(a)*9,z=Math.sin(a)*9;
         if(theme==="candy_kingdom") {this.lathe("candy-tower",root,[x,0,z],[[1,0],[1,4],[1.4,4.1],[0,6]],palette[1]);for(let j=0;j<5;j++)this.mesh("CreateTorus","candy-stripe",root,{diameter:2.05,thickness:.12,tessellation:32},[x,.6+j*.7,z],red);}
         else if(theme==="neon_city") {const height=4+i%3*2;this.box("neon-tower",root,[x,height/2,z],[2,height,2],palette[0]);for(let j=0;j<5;j++)this.box("neon-window",root,[x,.7+j*1.05,z-1.03],[1.7,.22,.035],palette[i%2+1]).material=this.mat(palette[i%2+1],.15,.6);}
@@ -324,7 +325,7 @@ const CircusArt = {
         this.obstacle(root,x,z,2.7,2.7);
       }
       this.text("world-title",root,[0,6,6],location.name.toUpperCase(),16,1.4,palette[1],palette[0]);
-      if(location.zone_index===2){this.mesh("CreateTorus","quest-core",root,{diameter:4,thickness:.35,tessellation:48},[0,3,3],palette[1]).rotation.x=Math.PI/2;this.obstacle(root,0,3,4,1);}
+      if(location.zone_index===2&&location.world_theme!=='candy_factory'){this.mesh("CreateTorus","quest-core",root,{diameter:4,thickness:.35,tessellation:48},[0,3,3],palette[1]).rotation.x=Math.PI/2;this.obstacle(root,0,3,4,1);}
     }
     const label=node("div","location-label",location.name);ui.labels.appendChild(label);
     worldView.locations.set(id,{root,label,location,anchor:new BABYLON.Vector3(0,7,0)});

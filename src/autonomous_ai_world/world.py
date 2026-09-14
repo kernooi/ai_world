@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 
 from autonomous_ai_world.events import EventBus
+from autonomous_ai_world.story import offer as story_offer
 from autonomous_ai_world.models import (
     Action,
     ActionKind,
@@ -142,6 +143,7 @@ class World:
         known_adventures = tuple(
             {
                 "id": adventure.id,
+                **story_offer(self, adventure, character_id),
                 "title": adventure.title,
                 "premise": adventure.premise,
                 "stakes": adventure.stakes,
@@ -170,7 +172,7 @@ class World:
                     if adventure.phase is AdventurePhase.DISCOVERY
                     else self._next_step(
                         character.location_id,
-                        adventure.generated_location_ids[-1]
+                        adventure.story['location_id'] if adventure.story and not adventure.story.get('done') else adventure.generated_location_ids[-1]
                         if adventure.generated_location_ids
                         else adventure.hidden_location_id,
                     )
@@ -420,7 +422,11 @@ class World:
             ),
             AdventurePhase.RESOLUTION: (
                 cause.kind is EventKind.INSPECTED
-                and cause.data.get("target_id") == adventure.escalation_feature_id
+                and (cause.data.get("target_id") == adventure.escalation_feature_id
+                     if not adventure.id.startswith('sugar_factory_') else
+                     adventure.story.get('done') and not adventure.story.get('failed')
+                     and adventure.story.get('scene') == 5
+                     and cause.data.get('target_id') == f'{adventure.id}:story:4:work')
             ),
         }[new_phase]
         if not valid_cause:
@@ -457,7 +463,7 @@ class World:
             adventure.status = AdventureStatus.RESOLVED
             adventure.resolved_by = actor.id
             adventure.outcome = (
-                f"{actor.name} completed the quest: {adventure.quest_objective}"
+                adventure.story.get('outcome') or f"{actor.name} completed the quest: {adventure.quest_objective}"
             )
             kind = EventKind.ADVENTURE_RESOLVED
             summary = f"{adventure.title} resolves: {adventure.outcome}"

@@ -24,7 +24,9 @@ def test_caine_creates_a_distinct_quest_world_every_world_day() -> None:
     assert len({location_id for adventure in adventures for location_id in adventure.generated_location_ids}) == 9
     assert all(len(adventure.objectives) == 4 for adventure in adventures)
     starts = [event for event in simulation.world.events.history if event.kind is EventKind.ADVENTURE_STARTED]
-    assert [event.tick for event in starts] == [1, 96, 240]
+    assert starts[0].tick == 1
+    assert starts[1].tick >= 96  # An active climax may finish after midnight.
+    assert starts[2].tick == 240
 
 
 def test_caine_announcement_reaches_cast_and_objectives_are_completed_by_characters() -> None:
@@ -35,7 +37,7 @@ def test_caine_announcement_reaches_cast_and_objectives_are_completed_by_charact
     assert all(f"adventure:{adventure.id}" in character.knowledge for character in simulation.world.characters.values())
     # Spatial routines let the cast visibly approach and perform each action,
     # so a complete five-phase adventure intentionally takes longer.
-    simulation.run(40)
+    simulation.run(100)
     assert adventure.status is AdventureStatus.RESOLVED
     assert all(objective.status == "complete" for objective in adventure.objectives)
     assert all(objective.completed_by in simulation.world.characters for objective in adventure.objectives)

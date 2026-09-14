@@ -76,7 +76,7 @@ def test_stage_20_builds_and_completes_emergent_episode() -> None:
             break
 
     first = simulation.episodes.episodes[0]
-    assert first.title == "The Glitching Midway"
+    assert first.title == "Escape from the Sugarworks"
     assert first.status == "complete"
     assert first.major_event_sequences
     assert first.memorable_moments

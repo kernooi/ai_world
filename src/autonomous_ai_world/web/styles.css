@@ -225,6 +225,11 @@ h2 { margin-top: 3px; font-size: 17px; font-weight: 650; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .model-credits { position:fixed;bottom:2px;right:24px;z-index:16;color:#ddc8af;font-size:9px;text-decoration:none;text-shadow:0 1px 3px #000; }
 .model-credits:hover,.model-credits:focus-visible { color:#ffe48a;text-decoration:underline; }
+.story-scene { border:1px solid #f4b979;border-radius:12px;padding:14px;margin-bottom:16px;background:#442238; }
+.story-scene h3 { color:#ffe1a4;margin:9px 0;font-size:17px; }
+.story-scene p { line-height:1.5;font-size:13px; }
+.story-scene small { display:block;margin-top:7px;color:#f4d7a1; }
+.story-scene progress { width:100%;accent-color:#68d7b4;margin-top:10px; }
 
 .adventure-panel { max-height: calc(100vh - 304px); overflow-y: auto; width: 284px; }
 .world-systems { display: none; }
